@@ -1,0 +1,10 @@
+{
+  "name": "@smart-queue/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "lint": "node -e \"console.log('No shared lint targets yet.')\""
+  }
+}
+

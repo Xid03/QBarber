@@ -1,0 +1,43 @@
+<!-- QueueSmart Logo - Primary Version -->
+<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2563EB" />
+      <stop offset="100%" style="stop-color:#7C3AED" />
+    </linearGradient>
+  </defs>
+
+  <circle cx="100" cy="100" r="95" fill="url(#logoGrad)" />
+
+  <g stroke="white" stroke-width="6" stroke-linecap="round" fill="none">
+    <path
+      d="M92 35 L58 110 C55 118 50 122 42 122
+             C32 122 25 114 25 104
+             C25 97 30 91 37 89 L78 58"
+    />
+    <path
+      d="M108 35 L142 110 C145 118 150 122 158 122
+             C168 122 175 114 175 104
+             C175 97 170 91 163 89 L122 58"
+    />
+  </g>
+
+  <circle cx="100" cy="52" r="8" fill="white" />
+  <circle cx="100" cy="52" r="4" fill="#2563EB" />
+
+  <circle cx="35" cy="112" r="18" stroke="white" stroke-width="6" fill="rgba(255,255,255,0.15)" />
+  <circle cx="165" cy="112" r="18" stroke="white" stroke-width="6" fill="rgba(255,255,255,0.15)" />
+
+  <rect x="78" y="74" width="44" height="34" rx="10" fill="white" />
+  <text
+    x="100"
+    y="99"
+    text-anchor="middle"
+    fill="#2563EB"
+    font-family="Arial,sans-serif"
+    font-weight="900"
+    font-size="24"
+  >
+    Q
+  </text>
+</svg>

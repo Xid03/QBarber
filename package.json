@@ -1,0 +1,23 @@
+{
+  "name": "smart-queue-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo for a smart queue management system for barbershops.",
+  "workspaces": [
+    "client-mobile",
+    "client-web",
+    "server",
+    "shared"
+  ],
+  "engines": {
+    "node": ">=18.18.0",
+    "npm": ">=9.0.0"
+  },
+  "scripts": {
+    "install:all": "npm install --workspaces",
+    "lint": "npm run lint --workspaces --if-present",
+    "dev:mobile": "npm run start --workspace @smart-queue/client-mobile",
+    "dev:web": "npm run start --workspace @smart-queue/client-web",
+    "dev:server": "npm run dev --workspace @smart-queue/server"
+  }
+}
