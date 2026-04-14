@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button,
   Card,
@@ -13,10 +13,60 @@ import {
 } from '../components/AdminUI';
 import { settingsData, getToneForStatus } from '../services/mockData';
 import { useApp } from '../context/AppContext';
+import { shopsAPI } from '../services/api';
 
 export default function SettingsPage() {
-  const { notify } = useApp();
+  const { notify, session } = useApp();
+  const shopId = session?.shop?._id;
   const [settings, setSettings] = useState(() => JSON.parse(JSON.stringify(settingsData)));
+
+  useEffect(() => {
+    if (!shopId) {
+      return;
+    }
+
+    shopsAPI
+      .get(shopId)
+      .then((response) => {
+        setSettings((current) => ({
+          ...current,
+          shopInfo: {
+            ...current.shopInfo,
+            name: response.data?.name || current.shopInfo.name,
+            address: response.data?.address || current.shopInfo.address,
+            phone: response.data?.phone || current.shopInfo.phone,
+            email: response.data?.email || current.shopInfo.email,
+            logo: 'QB'
+          },
+          operatingHours: current.operatingHours.map((hour, index) => ({
+            ...hour,
+            open: response.data?.operatingHours?.open || hour.open,
+            close: response.data?.operatingHours?.close || hour.close,
+            enabled: index < 6
+          })),
+          bookingSettings: {
+            ...current.bookingSettings,
+            fee: `RM${response.data?.bookingFee || 0}`,
+            currency: response.data?.currency || current.bookingSettings.currency
+          },
+          branches: response.data?.branches?.length
+            ? response.data.branches.map((branch, index) => ({
+                id: `BR${index + 1}`,
+                name: branch.name,
+                address: branch.address,
+                status: 'Live'
+              }))
+            : current.branches
+        }));
+      })
+      .catch((error) => {
+        notify({
+          title: 'Settings sync failed',
+          message: error.message,
+          tone: 'danger'
+        });
+      });
+  }, [shopId]);
 
   const updateShop = (key, value) => {
     setSettings((current) => ({
@@ -88,12 +138,42 @@ export default function SettingsPage() {
     });
   };
 
-  const savePreview = (label) =>
-    notify({
-      title: `${label} saved`,
-      message: `${label} changes are stored in local UI state for this preview.`,
-      tone: 'success'
-    });
+  const savePreview = async (label) => {
+    if (!shopId) {
+      return;
+    }
+
+    try {
+      await shopsAPI.update(shopId, {
+        name: settings.shopInfo.name,
+        address: settings.shopInfo.address,
+        phone: settings.shopInfo.phone,
+        email: settings.shopInfo.email,
+        operatingHours: {
+          open: settings.operatingHours[0]?.open || '09:00',
+          close: settings.operatingHours[0]?.close || '21:00'
+        },
+        bookingFee: Number(String(settings.bookingSettings.fee).replace(/[^\d.]/g, '')) || 0,
+        currency: settings.bookingSettings.currency,
+        branches: settings.branches.map((branch) => ({
+          name: branch.name,
+          address: branch.address
+        }))
+      });
+
+      notify({
+        title: `${label} saved`,
+        message: `${label} was synced to the live shop settings.`,
+        tone: 'success'
+      });
+    } catch (error) {
+      notify({
+        title: 'Settings save failed',
+        message: error.message,
+        tone: 'danger'
+      });
+    }
+  };
 
   return (
     <div className="space-y-6">

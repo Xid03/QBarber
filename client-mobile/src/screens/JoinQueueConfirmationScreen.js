@@ -1,7 +1,7 @@
 import QRCode from 'react-native-qrcode-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import {
   ActionButton,
   EmptyStateCard,
@@ -12,13 +12,24 @@ import {
   StatusBadge,
   SurfaceCard
 } from '../components/AppUI';
-import { queueSnapshot } from '../utils/mockData';
+import { useClientSession } from '../utils/session';
 import { useAppTheme } from '../utils/theme';
 
 export default function JoinQueueConfirmationScreen({ navigation }) {
   const { theme } = useAppTheme();
+  const { currentQueueEntry, queueSnapshot, leaveQueueRemote } = useClientSession();
   const [previewMode, setPreviewMode] = useState('live');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const hasQueuePass = Boolean(currentQueueEntry && queueSnapshot);
+
+  const handleCancelQueue = async () => {
+    try {
+      await leaveQueueRemote();
+      setPreviewMode('empty');
+    } catch (error) {
+      Alert.alert('Unable to cancel queue', error.message);
+    }
+  };
 
   return (
     <ScreenShell
@@ -29,7 +40,7 @@ export default function JoinQueueConfirmationScreen({ navigation }) {
 
       {previewMode === 'loading' ? <PreviewLoadingPanel blocks={[120, 280, 110]} /> : null}
 
-      {previewMode === 'empty' ? (
+      {previewMode === 'empty' || (previewMode === 'live' && !hasQueuePass) ? (
         <EmptyStateCard
           actionLabel="Join again"
           description="Your queue pass has been released. You can jump back into the line whenever you want."
@@ -51,7 +62,7 @@ export default function JoinQueueConfirmationScreen({ navigation }) {
         />
       ) : null}
 
-      {previewMode === 'live' ? (
+      {previewMode === 'live' && hasQueuePass ? (
         <>
           <LinearGradient
             colors={theme.primaryGradient}
@@ -93,7 +104,7 @@ export default function JoinQueueConfirmationScreen({ navigation }) {
                 backgroundColor="transparent"
                 color={theme.text}
                 size={180}
-                value={`QUEUE:${queueSnapshot.queueNumber}:CHECKIN`}
+                value={`QUEUE:${currentQueueEntry._id}:CHECKIN`}
               />
             </View>
             <Text
@@ -190,7 +201,7 @@ export default function JoinQueueConfirmationScreen({ navigation }) {
             <ActionButton
               icon="x"
               label="Cancel Queue"
-              onPress={() => setPreviewMode('empty')}
+              onPress={handleCancelQueue}
               subtitle="Release this spot immediately"
               variant="danger"
             />

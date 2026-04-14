@@ -11,7 +11,12 @@ import QueueManagementPage from './pages/QueueManagementPage';
 import SettingsPage from './pages/SettingsPage';
 
 function AuthRedirect() {
-  const { isAuthenticated } = useApp();
+  const { isAuthenticated, isBooting } = useApp();
+
+  if (isBooting) {
+    return null;
+  }
+
   return <Navigate replace to={isAuthenticated ? '/dashboard' : '/login'} />;
 }
 
@@ -40,7 +45,11 @@ function RouteTransition({ children }) {
 }
 
 function ProtectedLayout() {
-  const { isAuthenticated } = useApp();
+  const { isAuthenticated, isBooting } = useApp();
+
+  if (isBooting) {
+    return null;
+  }
 
   if (!isAuthenticated) {
     return <Navigate replace to="/login" />;
@@ -56,7 +65,11 @@ function ProtectedLayout() {
 }
 
 function LoginRoute() {
-  const { isAuthenticated } = useApp();
+  const { isAuthenticated, isBooting } = useApp();
+
+  if (isBooting) {
+    return null;
+  }
 
   if (isAuthenticated) {
     return <Navigate replace to="/dashboard" />;

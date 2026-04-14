@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   ActionButton,
   EmptyStateCard,
@@ -10,17 +10,43 @@ import {
   StatusBadge,
   SurfaceCard
 } from '../components/AppUI';
-import { barbers, bookingSetup, formatCurrency, getInitials } from '../utils/mockData';
+import { bookingSetup, formatCurrency, getInitials } from '../utils/mockData';
+import { useClientSession } from '../utils/session';
 import { useAppTheme } from '../utils/theme';
+
+function buildDateOptions() {
+  return Array.from({ length: 4 }).map((_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() + index);
+
+    return {
+      id: date.toISOString().slice(0, 10),
+      label:
+        index === 0
+          ? 'Today'
+          : index === 1
+            ? 'Tomorrow'
+            : date.toLocaleDateString('en-MY', { weekday: 'short' }),
+      meta: date.toLocaleDateString('en-MY', {
+        day: 'numeric',
+        month: 'short',
+        weekday: index > 1 ? undefined : 'short'
+      })
+    };
+  });
+}
 
 export default function BookingScreen({ navigation }) {
   const { theme } = useAppTheme();
+  const { barbers, availableSlots, loadAvailableSlots, createPremiumBooking } = useClientSession();
   const [previewMode, setPreviewMode] = useState('live');
   const [selectedServiceId, setSelectedServiceId] = useState(bookingSetup.serviceTypes[0].id);
-  const [selectedDateId, setSelectedDateId] = useState(bookingSetup.dates[1].id);
-  const [selectedSlotId, setSelectedSlotId] = useState('11:30');
-  const [selectedBarberId, setSelectedBarberId] = useState('nora');
+  const dateOptions = useMemo(() => buildDateOptions(), []);
+  const [selectedDateId, setSelectedDateId] = useState(dateOptions[1]?.id || dateOptions[0].id);
+  const [selectedSlotId, setSelectedSlotId] = useState(null);
+  const [selectedBarberId, setSelectedBarberId] = useState(null);
   const [selectedPaymentId, setSelectedPaymentId] = useState(bookingSetup.paymentMethods[0].id);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const selectedService = useMemo(
     () =>
@@ -29,16 +55,16 @@ export default function BookingScreen({ navigation }) {
     [selectedServiceId]
   );
   const selectedDate = useMemo(
-    () => bookingSetup.dates.find((date) => date.id === selectedDateId) || bookingSetup.dates[0],
-    [selectedDateId]
+    () => dateOptions.find((date) => date.id === selectedDateId) || dateOptions[0],
+    [selectedDateId, dateOptions]
   );
   const selectedSlot = useMemo(
-    () => bookingSetup.timeSlots.find((slot) => slot.id === selectedSlotId) || null,
-    [selectedSlotId]
+    () => availableSlots.find((slot) => slot.startTime === selectedSlotId) || null,
+    [availableSlots, selectedSlotId]
   );
   const selectedBarber = useMemo(
-    () => barbers.find((barber) => barber.id === selectedBarberId) || barbers[1],
-    [selectedBarberId]
+    () => barbers.find((barber) => barber.id === selectedBarberId) || barbers[0],
+    [selectedBarberId, barbers]
   );
   const selectedPayment = useMemo(
     () =>
@@ -47,23 +73,68 @@ export default function BookingScreen({ navigation }) {
     [selectedPaymentId]
   );
 
+  useEffect(() => {
+    if (previewMode !== 'live' || !selectedDate?.id) {
+      return;
+    }
+
+    loadAvailableSlots({
+      date: selectedDate.id,
+      barberId: selectedBarberId
+    })
+      .then((slots) => {
+        const firstSlot = slots?.availableSlots?.[0]?.startTime || null;
+
+        setSelectedSlotId((current) => {
+          if (current && slots?.availableSlots?.some((slot) => slot.startTime === current)) {
+            return current;
+          }
+
+          return firstSlot;
+        });
+      })
+      .catch(() => {});
+  }, [selectedDate?.id, selectedBarberId, previewMode]);
+
   const canContinue = Boolean(selectedSlot);
+
+  const handleContinue = async () => {
+    if (!selectedSlot) {
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const result = await createPremiumBooking({
+        date: selectedDate.id,
+        startTime: selectedSlot.startTime,
+        barberId: selectedBarberId,
+        serviceType: selectedService.name,
+        amount: selectedService.price + bookingSetup.summary.bookingFee
+      });
+
+      navigation.navigate('BookingConfirmation', {
+        barber: result.booking?.barberId?.name || selectedBarber?.name || 'First available barber',
+        bookingId: result.booking?._id || bookingSetup.confirmation.bookingId,
+        date: selectedDate.meta,
+        service: selectedService.name,
+        time: selectedSlot.startTime
+      });
+    } catch (error) {
+      Alert.alert('Unable to confirm booking', error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const footer = (
     <ActionButton
-      disabled={!canContinue}
+      disabled={!canContinue || isSubmitting}
       icon="arrow-right"
-      label="Review Premium Booking"
-      onPress={() =>
-        navigation.navigate('BookingConfirmation', {
-          barber: selectedBarber.name,
-          bookingId: bookingSetup.confirmation.bookingId,
-          date: selectedDate.meta,
-          service: selectedService.name,
-          time: selectedSlot?.label
-        })
-      }
-      subtitle={selectedSlot ? `${selectedDate.meta} at ${selectedSlot.label}` : 'Choose a time slot'}
+      label={isSubmitting ? 'Confirming Booking...' : 'Review Premium Booking'}
+      onPress={handleContinue}
+      subtitle={selectedSlot ? `${selectedDate.meta} at ${selectedSlot.startTime}` : 'Choose a time slot'}
     />
   );
 
@@ -173,7 +244,7 @@ export default function BookingScreen({ navigation }) {
               horizontal
               showsHorizontalScrollIndicator={false}
             >
-              {bookingSetup.dates.map((date) => {
+              {dateOptions.map((date) => {
                 const isSelected = date.id === selectedDateId;
 
                 return (
@@ -220,7 +291,7 @@ export default function BookingScreen({ navigation }) {
                         }
                       ]}
                     >
-                      {date.slotsLeft} slots left
+                      {availableSlots.length} slots left
                     </Text>
                   </Pressable>
                 );
@@ -241,25 +312,20 @@ export default function BookingScreen({ navigation }) {
               <StatusBadge icon="zap" label="Booking fee applies" tone="primary" />
             </View>
             <View style={styles.slotGrid}>
-              {bookingSetup.timeSlots.map((slot) => {
-                const isSelected = slot.id === selectedSlotId;
+              {availableSlots.map((slot) => {
+                const isSelected = slot.startTime === selectedSlotId;
 
                 return (
                   <Pressable
-                    key={slot.id}
+                    key={slot.startTime}
                     accessibilityRole="button"
-                    disabled={!slot.available}
-                    onPress={() => setSelectedSlotId(slot.id)}
+                    onPress={() => setSelectedSlotId(slot.startTime)}
                     style={[
                       styles.slotChip,
                       {
-                        backgroundColor: !slot.available
-                          ? theme.surfaceElevated
-                          : isSelected
-                            ? theme.primary
-                            : theme.surface,
+                        backgroundColor: isSelected ? theme.primary : theme.surface,
                         borderColor: isSelected ? theme.primary : theme.border,
-                        opacity: slot.available ? 1 : 0.45
+                        opacity: 1
                       }
                     ]}
                   >
@@ -272,9 +338,9 @@ export default function BookingScreen({ navigation }) {
                         }
                       ]}
                     >
-                      {slot.label}
+                      {slot.startTime}
                     </Text>
-                    {slot.featured ? (
+                    {slot.barbers?.length > 1 ? (
                       <Text
                         style={[
                           styles.slotTag,
@@ -284,12 +350,21 @@ export default function BookingScreen({ navigation }) {
                           }
                         ]}
                       >
-                        best pick
+                        {slot.barbers.length} barbers free
                       </Text>
                     ) : null}
                   </Pressable>
                 );
               })}
+              {availableSlots.length === 0 ? (
+                <EmptyStateCard
+                  actionLabel="Try another day"
+                  description="No premium slots are currently free for the selected date and barber."
+                  icon="calendar"
+                  onAction={() => setSelectedDateId(dateOptions[0].id)}
+                  title="No slots available"
+                />
+              ) : null}
             </View>
           </SurfaceCard>
 

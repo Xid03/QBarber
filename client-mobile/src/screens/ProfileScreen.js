@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 import {
   ActionButton,
@@ -11,17 +11,32 @@ import {
   SurfaceCard
 } from '../components/AppUI';
 import QueueSmartLogo from '../components/QueueSmartLogo';
-import { profile } from '../utils/mockData';
 import { useClientSession } from '../utils/session';
 import { useAppTheme } from '../utils/theme';
 
 export default function ProfileScreen({ navigation }) {
   const { mode, theme, toggleTheme } = useAppTheme();
-  const { logout } = useClientSession();
+  const { logout, profile, refreshBookings } = useClientSession();
   const [previewMode, setPreviewMode] = useState('live');
-  const [preferences, setPreferences] = useState(profile.preferences);
+  const [preferences, setPreferences] = useState(profile?.preferences || { push: true, sms: false, promo: true });
 
-  const progress = Math.min(profile.loyaltyPoints / profile.nextRewardAt, 1);
+  useEffect(() => {
+    refreshBookings().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (profile?.preferences) {
+      setPreferences(profile.preferences);
+    }
+  }, [profile?.preferences]);
+
+  const progress = useMemo(() => {
+    if (!profile) {
+      return 0;
+    }
+
+    return Math.min(profile.loyaltyPoints / profile.nextRewardAt, 1);
+  }, [profile]);
 
   return (
     <ScreenShell
@@ -32,7 +47,7 @@ export default function ProfileScreen({ navigation }) {
 
       {previewMode === 'loading' ? <PreviewLoadingPanel blocks={[180, 130, 160]} /> : null}
 
-      {previewMode === 'empty' ? (
+      {previewMode === 'empty' || (previewMode === 'live' && !profile) ? (
         <EmptyStateCard
           actionLabel="Book your first visit"
           description="No visits or loyalty progress yet. This is the empty state for brand-new users."
@@ -51,7 +66,7 @@ export default function ProfileScreen({ navigation }) {
         />
       ) : null}
 
-      {previewMode === 'live' ? (
+      {previewMode === 'live' && profile ? (
         <>
           <SurfaceCard tone="accent">
             <View style={styles.profileHeader}>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Card,
@@ -10,8 +10,9 @@ import {
   Select,
   StatusBadge
 } from '../components/AdminUI';
-import { assignableCustomers, barbers, getToneForStatus } from '../services/mockData';
+import { getToneForStatus } from '../services/mockData';
 import { useApp } from '../context/AppContext';
+import { barbersAPI, queueAPI } from '../services/api';
 
 const emptyBarberForm = {
   id: '',
@@ -28,14 +29,76 @@ const emptyBarberForm = {
 };
 
 export default function BarberManagementPage() {
-  const { notify } = useApp();
-  const [roster, setRoster] = useState(barbers);
+  const { notify, session } = useApp();
+  const shopId = session?.shop?._id;
+  const [roster, setRoster] = useState([]);
+  const [assignableEntries, setAssignableEntries] = useState([]);
   const [assignment, setAssignment] = useState({
-    barberId: barbers[0].id,
-    customer: assignableCustomers[0]
+    barberId: '',
+    customer: ''
   });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [barberForm, setBarberForm] = useState(emptyBarberForm);
+
+  const assignableCustomers = useMemo(
+    () =>
+      assignableEntries.map((entry) => ({
+        label: `${entry.userId?.name || 'Guest'} (#${entry.queueNumber})`,
+        value: String(entry._id)
+      })),
+    [assignableEntries]
+  );
+
+  const loadRoster = async () => {
+    if (!shopId) {
+      return;
+    }
+
+    try {
+      const [barbersResponse, queueResponse] = await Promise.all([
+        barbersAPI.list({ shopId }),
+        queueAPI.status(shopId)
+      ]);
+      const nextRoster = (barbersResponse.data || []).map((barber) => ({
+        id: String(barber._id),
+        name: barber.name,
+        specialty: barber.specialty,
+        avgServiceTime: barber.avgServiceTime,
+        status: barber.status.charAt(0).toUpperCase() + barber.status.slice(1),
+        rating: barber.rating,
+        totalServices: barber.totalServices,
+        isActive: barber.isActive !== false,
+        utilization: `${Math.min(99, 40 + (barber.totalServices || 0) % 55)}%`,
+        currentCustomer:
+          queueResponse.data?.entries?.find(
+            (entry) => entry.status === 'serving' && String(entry.barberId?._id || entry.barberId) === String(barber._id)
+          )?.userId?.name || 'None',
+        avatar: barber.name
+          .split(' ')
+          .map((part) => part[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase()
+      }));
+
+      setRoster(nextRoster);
+      setAssignment((current) => ({
+        barberId: current.barberId || nextRoster[0]?.id || '',
+        customer: current.customer || ''
+      }));
+      setAssignableEntries(queueResponse.data?.waitingEntries || []);
+    } catch (error) {
+      notify({
+        title: 'Roster sync failed',
+        message: error.message,
+        tone: 'danger'
+      });
+    }
+  };
+
+  useEffect(() => {
+    loadRoster();
+  }, [shopId]);
 
   const openNewBarber = () => {
     setBarberForm(emptyBarberForm);
@@ -47,7 +110,7 @@ export default function BarberManagementPage() {
     setIsModalOpen(true);
   };
 
-  const handleSave = (event) => {
+  const handleSave = async (event) => {
     event.preventDefault();
 
     if (!barberForm.name.trim()) {
@@ -59,73 +122,84 @@ export default function BarberManagementPage() {
       return;
     }
 
-    if (barberForm.id) {
-      setRoster((current) =>
-        current.map((barber) => (barber.id === barberForm.id ? { ...barberForm } : barber))
-      );
-
-      notify({
-        title: 'Barber updated',
-        message: `${barberForm.name} was refreshed in the roster preview.`,
-        tone: 'success'
-      });
-    } else {
-      const newBarber = {
-        ...barberForm,
-        id: `B${roster.length + 1}`,
-        avatar: barberForm.name
-          .split(' ')
-          .map((part) => part[0])
-          .join('')
-          .slice(0, 2)
-          .toUpperCase()
+    try {
+      const payload = {
+        shopId,
+        name: barberForm.name,
+        specialty: barberForm.specialty,
+        avgServiceTime: Number(barberForm.avgServiceTime),
+        status: barberForm.status.toLowerCase(),
+        isActive: barberForm.isActive
       };
 
-      setRoster((current) => [...current, newBarber]);
+      if (barberForm.id) {
+        await barbersAPI.update(barberForm.id, payload);
+        notify({
+          title: 'Barber updated',
+          message: `${barberForm.name} was refreshed in the live roster.`,
+          tone: 'success'
+        });
+      } else {
+        await barbersAPI.create(payload);
+        notify({
+          title: 'Barber added',
+          message: `${barberForm.name} is now visible in the live roster.`,
+          tone: 'success'
+        });
+      }
+
+      await loadRoster();
+      setIsModalOpen(false);
+    } catch (error) {
       notify({
-        title: 'Barber added',
-        message: `${newBarber.name} is now visible in the UI roster.`,
-        tone: 'success'
+        title: 'Save failed',
+        message: error.message,
+        tone: 'danger'
       });
     }
-
-    setIsModalOpen(false);
   };
 
-  const toggleAvailability = (id) => {
-    setRoster((current) =>
-      current.map((barber) =>
-        barber.id === id
-          ? {
-              ...barber,
-              isActive: !barber.isActive,
-              status: barber.isActive ? 'Offline' : 'Online'
-            }
-          : barber
-      )
-    );
+  const toggleAvailability = async (id) => {
+    const target = roster.find((barber) => barber.id === id);
+
+    if (!target) {
+      return;
+    }
+
+    await barbersAPI.update(id, {
+      isActive: !target.isActive,
+      status: target.isActive ? 'offline' : 'online'
+    });
+    await loadRoster();
   };
 
-  const handleAssign = () => {
+  const handleAssign = async () => {
     const selectedBarber = roster.find((barber) => barber.id === assignment.barberId);
 
-    setRoster((current) =>
-      current.map((barber) =>
-        barber.id === assignment.barberId
-          ? {
-              ...barber,
-              currentCustomer: assignment.customer.split(' (#')[0],
-              status: 'Online'
-            }
-          : barber
-      )
-    );
+    if (!assignment.customer) {
+      notify({
+        title: 'No queue customer selected',
+        message: 'Choose a waiting queue entry before assigning a barber.',
+        tone: 'warning'
+      });
+      return;
+    }
 
-    notify({
-      title: 'Customer assigned',
-      message: `${assignment.customer} is now mapped to ${selectedBarber?.name}.`,
-      tone: 'brand'
-    });
+    try {
+      await queueAPI.startService(assignment.customer, { barberId: assignment.barberId });
+      await loadRoster();
+      notify({
+        title: 'Customer assigned',
+        message: `${selectedBarber?.name} is now serving the selected queue customer.`,
+        tone: 'brand'
+      });
+    } catch (error) {
+      notify({
+        title: 'Assignment failed',
+        message: error.message,
+        tone: 'danger'
+      });
+    }
   };
 
   return (
@@ -210,8 +284,8 @@ export default function BarberManagementPage() {
                 value={assignment.customer}
               >
                 {assignableCustomers.map((customer) => (
-                  <option key={customer} value={customer}>
-                    {customer}
+                  <option key={customer.value} value={customer.value}>
+                    {customer.label}
                   </option>
                 ))}
               </Select>

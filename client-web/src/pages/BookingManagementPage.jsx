@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Card,
@@ -9,21 +9,91 @@ import {
   StatusBadge,
   Icon
 } from '../components/AdminUI';
-import {
-  bookingCalendarDays,
-  bookingRows,
-  getToneForStatus
-} from '../services/mockData';
+import { getToneForStatus } from '../services/mockData';
 import { useApp } from '../context/AppContext';
+import { bookingsAPI } from '../services/api';
 
 const filters = ['All', 'Today', 'Upcoming', 'Past', 'Cancelled'];
 
+function buildCalendarDays(bookings) {
+  return Array.from({ length: 7 }).map((_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() + index);
+    const dateId = date.toISOString().slice(0, 10);
+
+    return {
+      id: dateId,
+      label: date.toLocaleDateString('en-MY', { weekday: 'short' }),
+      day: date.toLocaleDateString('en-MY', { day: '2-digit' }),
+      bookings: bookings.filter((booking) => booking.dateId === dateId).length
+    };
+  });
+}
+
+function mapBookings(bookings) {
+  return (bookings || []).map((booking) => ({
+    id: String(booking._id),
+    customer: booking.userId?.name || 'Guest',
+    phone: booking.userId?.phone || '-',
+    dateId: new Date(booking.scheduledDate).toISOString().slice(0, 10),
+    slot: booking.startTime,
+    barber: booking.barberId?.name || 'First available barber',
+    service: booking.serviceType || 'Premium booking',
+    source: 'Premium',
+    amount: `RM${booking.amount || 0}`,
+    paymentStatus:
+      booking.paymentStatus.charAt(0).toUpperCase() + booking.paymentStatus.slice(1),
+    checkInStatus:
+      booking.status === 'checked-in'
+        ? 'Checked-in'
+        : booking.status === 'cancelled'
+          ? 'Missed'
+          : 'Pending',
+    status:
+      booking.status === 'confirmed'
+        ? 'Confirmed'
+        : booking.status === 'completed'
+          ? 'Past'
+          : booking.status.charAt(0).toUpperCase() + booking.status.slice(1),
+    raw: booking
+  }));
+}
+
 export default function BookingManagementPage() {
-  const { notify } = useApp();
-  const [bookings, setBookings] = useState(bookingRows);
+  const { notify, session } = useApp();
+  const shopId = session?.shop?._id;
+  const [bookings, setBookings] = useState([]);
   const [filter, setFilter] = useState('All');
-  const [selectedDay, setSelectedDay] = useState('2026-04-14');
+  const [selectedDay, setSelectedDay] = useState(new Date().toISOString().slice(0, 10));
   const [selectedBooking, setSelectedBooking] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadBookings = async () => {
+    if (!shopId) {
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await bookingsAPI.adminList({ shopId });
+      setBookings(mapBookings(response.data));
+    } catch (error) {
+      notify({
+        title: 'Booking sync failed',
+        message: error.message,
+        tone: 'danger'
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadBookings();
+  }, [shopId]);
+
+  const bookingCalendarDays = useMemo(() => buildCalendarDays(bookings), [bookings]);
 
   const visibleBookings = bookings.filter((booking) => {
     if (filter === 'Today') {
@@ -37,18 +107,28 @@ export default function BookingManagementPage() {
     return filter === 'All' ? booking.dateId === selectedDay : true;
   });
 
-  const updateBooking = (bookingId, updates, message) => {
-    setBookings((current) =>
-      current.map((booking) => (booking.id === bookingId ? { ...booking, ...updates } : booking))
-    );
+  const updateBooking = async (bookingId, payload, message) => {
+    try {
+      const response = await bookingsAPI.updateAdmin(bookingId, payload);
+      const nextBookings = bookings.map((booking) =>
+        booking.id === bookingId ? mapBookings([response.data])[0] : booking
+      );
 
-    setSelectedBooking((current) => (current ? { ...current, ...updates } : current));
+      setBookings(nextBookings);
+      setSelectedBooking(mapBookings([response.data])[0]);
 
-    notify({
-      title: 'Booking updated',
-      message,
-      tone: 'success'
-    });
+      notify({
+        title: 'Booking updated',
+        message,
+        tone: 'success'
+      });
+    } catch (error) {
+      notify({
+        title: 'Booking update failed',
+        message: error.message,
+        tone: 'danger'
+      });
+    }
   };
 
   const bookingColumns = [
@@ -126,7 +206,9 @@ export default function BookingManagementPage() {
         <div className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <SegmentedControl onChange={setFilter} options={filters} value={filter} />
-            <StatusBadge tone="slate">{visibleBookings.length} visible bookings</StatusBadge>
+            <StatusBadge tone="slate">
+              {isLoading ? 'Loading bookings' : `${visibleBookings.length} visible bookings`}
+            </StatusBadge>
           </div>
 
           <DataTable
@@ -136,6 +218,7 @@ export default function BookingManagementPage() {
             rows={visibleBookings}
             searchPlaceholder="Search booking, customer, or barber"
             title="Booking list"
+            emptyMessage={isLoading ? 'Loading bookings...' : 'No bookings match this view yet.'}
           />
         </div>
       </div>
@@ -170,7 +253,7 @@ export default function BookingManagementPage() {
                   updateBooking(
                     selectedBooking.id,
                     { status: 'Confirmed', paymentStatus: 'Paid' },
-                    `${selectedBooking.id} was marked confirmed for the UI preview.`
+                    `${selectedBooking.id} was confirmed on the live booking board.`
                   )
                 }
               >
@@ -181,7 +264,7 @@ export default function BookingManagementPage() {
                   updateBooking(
                     selectedBooking.id,
                     { status: 'Cancelled', paymentStatus: 'Refunded' },
-                    `${selectedBooking.id} was cancelled and marked refunded in the preview.`
+                    `${selectedBooking.id} was cancelled and marked refunded.`
                   )
                 }
                 tone="danger"
@@ -192,7 +275,7 @@ export default function BookingManagementPage() {
                 onClick={() =>
                   notify({
                     title: 'Reschedule flow',
-                    message: 'Rescheduling is mocked here and will be wired to booking logic later.',
+                    message: 'Rescheduling UI is ready; backend slot reassignment is still the next enhancement.',
                     tone: 'warning'
                   })
                 }

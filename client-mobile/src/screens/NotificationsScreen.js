@@ -1,5 +1,5 @@
 import { Feather } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   ActionButton,
@@ -11,7 +11,7 @@ import {
   StatusBadge,
   SurfaceCard
 } from '../components/AppUI';
-import { notifications as initialNotifications } from '../utils/mockData';
+import { useClientSession } from '../utils/session';
 import { useAppTheme } from '../utils/theme';
 
 const filters = [
@@ -23,9 +23,18 @@ const filters = [
 
 export default function NotificationsScreen({ navigation }) {
   const { theme } = useAppTheme();
+  const { notifications: initialNotifications, markNotificationRead, refreshNotifications } = useClientSession();
   const [previewMode, setPreviewMode] = useState('live');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [items, setItems] = useState(initialNotifications);
+
+  useEffect(() => {
+    setItems(initialNotifications);
+  }, [initialNotifications]);
+
+  useEffect(() => {
+    refreshNotifications().catch(() => {});
+  }, []);
 
   const filteredItems = useMemo(() => {
     if (selectedFilter === 'all') {
@@ -137,13 +146,16 @@ export default function NotificationsScreen({ navigation }) {
               <Pressable
                 key={item.id}
                 accessibilityRole="button"
-                onPress={() =>
+                onPress={() => {
+                  if (!item.read) {
+                    markNotificationRead(item.id).catch(() => {});
+                  }
                   setItems((currentItems) =>
                     currentItems.map((currentItem) =>
-                      currentItem.id === item.id ? { ...currentItem, read: !currentItem.read } : currentItem
+                      currentItem.id === item.id ? { ...currentItem, read: true } : currentItem
                     )
-                  )
-                }
+                  );
+                }}
               >
                 <SurfaceCard style={styles.notificationCard}>
                   <View style={[styles.notificationIcon, { backgroundColor: theme.surfaceElevated }]}>

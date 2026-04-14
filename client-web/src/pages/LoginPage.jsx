@@ -13,10 +13,13 @@ export default function LoginPage() {
     password: demoCredentials.password,
     remember: true
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
-    const result = login(form);
+    setIsSubmitting(true);
+    const result = await login(form);
+    setIsSubmitting(false);
 
     if (result.ok) {
       navigate('/dashboard');
@@ -43,8 +46,8 @@ export default function LoginPage() {
               </div>
             </div>
             <p className="mt-4 max-w-xl text-base leading-7 text-slate-600">
-              This Phase 1 preview focuses on interface design only: queue visibility, barber flow,
-              premium bookings, analytics, and settings are all wired with realistic mock data.
+              The admin workspace now authenticates against the live QBarber backend, while the same
+              polished UI remains in place for queue control, bookings, analytics, and settings.
             </p>
           </div>
 
@@ -127,7 +130,7 @@ export default function LoginPage() {
 
             <Button className="w-full" size="lg" type="submit">
               <Icon name="check" />
-              Sign in to dashboard
+              {isSubmitting ? 'Signing in...' : 'Sign in to dashboard'}
             </Button>
           </form>
 

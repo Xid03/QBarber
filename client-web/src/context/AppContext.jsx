@@ -1,5 +1,5 @@
-import { createContext, useContext, useState } from 'react';
-import { demoCredentials, demoOwner } from '../services/mockData';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import { authAPI, setWebAuthToken } from '../services/api';
 
 const SESSION_KEY = 'qbarber.admin.session';
 const AppContext = createContext(null);
@@ -17,9 +17,37 @@ function readStoredSession() {
   }
 }
 
+function buildSession(payload, remember = true) {
+  const user = payload?.user || null;
+  const shop = payload?.shop || null;
+  const avatar = user?.name
+    ? user.name
+        .split(' ')
+        .slice(0, 2)
+        .map((part) => part.charAt(0))
+        .join('')
+        .toUpperCase()
+    : 'QB';
+
+  return {
+    token: payload?.token || null,
+    user,
+    shop,
+    remember,
+    loggedInAt: new Date().toISOString(),
+    name: user?.name || 'QBarber Admin',
+    role: user?.role ? `${user.role.charAt(0).toUpperCase()}${user.role.slice(1)}` : 'Admin',
+    shopName: shop?.name || 'QBarber',
+    branch: shop?.branches?.[0]?.name || shop?.name || 'Main branch',
+    email: user?.email || '',
+    avatar
+  };
+}
+
 export function AppProvider({ children }) {
   const [session, setSession] = useState(() => readStoredSession());
   const [toasts, setToasts] = useState([]);
+  const [isBooting, setIsBooting] = useState(() => Boolean(readStoredSession()?.token));
 
   const notify = ({ title, message, tone = 'brand' }) => {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -31,71 +59,124 @@ export function AppProvider({ children }) {
     }, 3400);
   };
 
-  const login = ({ email, password, remember }) => {
-    const normalizedEmail = email.trim().toLowerCase();
+  const persistSession = (nextSession) => {
+    setSession(nextSession);
+    setWebAuthToken(nextSession?.token || null);
 
-    if (normalizedEmail === demoCredentials.email && password === demoCredentials.password) {
-      const nextSession = {
-        ...demoOwner,
-        remember,
-        loggedInAt: new Date().toISOString()
-      };
+    if (typeof window === 'undefined') {
+      return;
+    }
 
-      setSession(nextSession);
+    if (nextSession?.remember && nextSession?.token) {
+      window.localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
+    } else {
+      window.localStorage.removeItem(SESSION_KEY);
+    }
+  };
 
-      if (typeof window !== 'undefined') {
-        if (remember) {
-          window.localStorage.setItem(SESSION_KEY, JSON.stringify(nextSession));
-        } else {
-          window.localStorage.removeItem(SESSION_KEY);
+  const clearSession = () => {
+    persistSession(null);
+  };
+
+  useEffect(() => {
+    if (!session?.token) {
+      setWebAuthToken(null);
+      setIsBooting(false);
+      return;
+    }
+
+    setWebAuthToken(session.token);
+
+    let cancelled = false;
+
+    authAPI
+      .me()
+      .then((response) => {
+        if (cancelled) {
+          return;
         }
-      }
+
+        persistSession(buildSession({ ...response.data, token: session.token }, session.remember !== false));
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+
+        clearSession();
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsBooting(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const login = async ({ email, password, remember }) => {
+    try {
+      const response = await authAPI.login({ email, password });
+      const nextSession = buildSession(response.data, remember);
+      persistSession(nextSession);
 
       notify({
-        title: 'Preview unlocked',
-        message: 'Admin dashboard loaded with demo data.',
+        title: 'Signed in',
+        message: 'Admin dashboard connected to the live QBarber backend.',
         tone: 'success'
       });
 
       return { ok: true };
+    } catch (error) {
+      notify({
+        title: 'Login failed',
+        message: error.message,
+        tone: 'danger'
+      });
+
+      return { ok: false, message: error.message };
     }
-
-    notify({
-      title: 'Login failed',
-      message: 'Use the demo credentials shown on the login card.',
-      tone: 'danger'
-    });
-
-    return { ok: false, message: 'Invalid demo credentials' };
   };
 
   const logout = () => {
-    setSession(null);
-
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(SESSION_KEY);
-    }
+    clearSession();
 
     notify({
       title: 'Logged out',
-      message: 'The admin preview session has been cleared.',
+      message: 'The admin session has been cleared from this browser.',
       tone: 'slate'
     });
   };
 
+  const refreshSession = async () => {
+    if (!session?.token) {
+      return null;
+    }
+
+    const response = await authAPI.me();
+    const nextSession = buildSession({ ...response.data, token: session.token }, session.remember !== false);
+    persistSession(nextSession);
+    return nextSession;
+  };
+
+  const value = useMemo(
+    () => ({
+      session,
+      isAuthenticated: Boolean(session?.token),
+      isBooting,
+      login,
+      logout,
+      notify,
+      refreshSession,
+      toasts
+    }),
+    [session, isBooting, toasts]
+  );
+
   return (
-    <AppContext.Provider
-      value={{
-        session,
-        isAuthenticated: Boolean(session),
-        login,
-        logout,
-        notify,
-        toasts
-      }}
-    >
-      {children}
-    </AppContext.Provider>
+    <AppContext.Provider value={value}>{children}</AppContext.Provider>
   );
 }
 

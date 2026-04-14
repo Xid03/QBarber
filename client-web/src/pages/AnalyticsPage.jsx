@@ -13,7 +13,6 @@ import {
 import { useState } from 'react';
 import { Button, Card, PageHeader, StatCard, StatusBadge, Icon } from '../components/AdminUI';
 import {
-  analyticsSummary,
   barberPerformance,
   customerVolumeData,
   heatmapHours,
@@ -22,6 +21,8 @@ import {
   serviceTimeDistribution
 } from '../services/mockData';
 import { useApp } from '../context/AppContext';
+import { useEffect, useMemo } from 'react';
+import { analyticsAPI, barbersAPI, bookingsAPI, queueAPI } from '../services/api';
 
 const pieColors = ['#2563EB', '#10B981', '#F59E0B', '#38BDF8'];
 
@@ -70,11 +71,83 @@ function HeatmapCard() {
 }
 
 export default function AnalyticsPage() {
-  const { notify } = useApp();
+  const { notify, session } = useApp();
+  const shopId = session?.shop?._id;
   const [range, setRange] = useState({
     start: '2026-04-08',
     end: '2026-04-14'
   });
+  const [summaryData, setSummaryData] = useState(null);
+  const [barbers, setBarbers] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [queueHistory, setQueueHistory] = useState([]);
+
+  useEffect(() => {
+    if (!shopId) {
+      return;
+    }
+
+    Promise.all([
+      analyticsAPI.summary({ shopId }),
+      barbersAPI.list({ shopId }),
+      bookingsAPI.adminList({ shopId }),
+      queueAPI.history(shopId)
+    ])
+      .then(([analyticsResponse, barbersResponse, bookingsResponse, queueHistoryResponse]) => {
+        setSummaryData(analyticsResponse.data);
+        setBarbers(barbersResponse.data || []);
+        setBookings(bookingsResponse.data || []);
+        setQueueHistory(queueHistoryResponse.data || []);
+      })
+      .catch((error) => {
+        notify({
+          title: 'Analytics sync failed',
+          message: error.message,
+          tone: 'danger'
+        });
+      });
+  }, [shopId]);
+
+  const analyticsSummary = useMemo(() => {
+    const totalBookings = bookings.length;
+    const completedVisits = queueHistory.filter((entry) => entry.status === 'completed').length;
+    const noShows = queueHistory.filter((entry) => entry.status === 'no-show').length;
+    const retentionRate = totalBookings ? Math.round((completedVisits / Math.max(totalBookings, 1)) * 100) : 0;
+    const noShowRate = queueHistory.length ? ((noShows / queueHistory.length) * 100).toFixed(1) : '0.0';
+
+    return [
+      {
+        id: 'retention',
+        label: 'Retention Rate',
+        value: `${retentionRate}%`,
+        delta: `${completedVisits} completed visits in range`,
+        tone: 'success'
+      },
+      {
+        id: 'peak',
+        label: 'Peak Window',
+        value: summaryData?.recentEvents?.[0]?.timestamp
+          ? new Date(summaryData.recentEvents[0].timestamp).toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit' })
+          : 'Live now',
+        delta: 'Based on recent events',
+        tone: 'warning'
+      },
+      {
+        id: 'no-show',
+        label: 'No-show Rate',
+        value: `${noShowRate}%`,
+        delta: `${noShows} no-show entries`,
+        tone: 'brand'
+      },
+      {
+        id: 'utilization',
+        label: 'Barber Utilization',
+        value: `${barbers.filter((barber) => barber.status === 'online').length}/${barbers.length}`,
+        delta: 'Online vs total roster',
+        tone: 'slate'
+      }
+    ];
+  }, [bookings, queueHistory, barbers, summaryData]);
 
   return (
     <div className="space-y-6">

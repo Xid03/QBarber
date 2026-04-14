@@ -8,7 +8,7 @@ import { useAppTheme } from '../utils/theme';
 
 export default function SplashScreen({ navigation }) {
   const { theme } = useAppTheme();
-  const { isLoggedIn, loginDemo } = useClientSession();
+  const { isLoggedIn, isAuthenticating, loginDemo } = useClientSession();
   const pulse = useRef(new Animated.Value(0.92)).current;
 
   useEffect(() => {
@@ -74,9 +74,12 @@ export default function SplashScreen({ navigation }) {
         {!isLoggedIn ? (
           <Pressable
             accessibilityRole="button"
-            onPress={() => {
-              loginDemo();
-              navigation.replace('MainTabs');
+            onPress={async () => {
+              const result = await loginDemo();
+
+              if (result?.ok) {
+                navigation.replace('MainTabs');
+              }
             }}
             style={({ pressed }) => [
               styles.continueButton,
@@ -89,16 +92,16 @@ export default function SplashScreen({ navigation }) {
               start={{ x: 0, y: 0 }}
               style={styles.continueGradient}
             >
-              <Text
-                style={[
-                  styles.continueLabel,
-                  { color: theme.primary, fontFamily: theme.typography.title }
-                ]}
-              >
-                Continue to QBarber
-              </Text>
-              <Text
-                style={[
+                <Text
+                  style={[
+                    styles.continueLabel,
+                    { color: theme.primary, fontFamily: theme.typography.title }
+                  ]}
+                >
+                  {isAuthenticating ? 'Connecting to Live Queue...' : 'Continue to QBarber'}
+                </Text>
+                <Text
+                  style={[
                   styles.continueHint,
                   { color: '#475569', fontFamily: theme.typography.body }
                 ]}
@@ -115,7 +118,11 @@ export default function SplashScreen({ navigation }) {
           { color: 'rgba(255,255,255,0.72)', fontFamily: theme.typography.label }
         ]}
       >
-        {isLoggedIn ? "Syncing today's queue rhythm..." : 'Signed out of the preview session'}
+        {isLoggedIn
+          ? "Syncing today's queue rhythm..."
+          : isAuthenticating
+            ? 'Signing in with the demo customer account'
+            : 'Signed out of the preview session'}
       </Text>
     </SafeAreaView>
   );

@@ -1,0 +1,7 @@
+# Use this workspace to collaborate
+workspace:
+  id: 736a2b04-2ed7-4c89-83da-908754636827
+
+localResources:
+  collections:
+    - ..\server\docs\qbarber.postman_collection.json

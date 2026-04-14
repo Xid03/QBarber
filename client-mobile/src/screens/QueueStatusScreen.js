@@ -11,16 +11,26 @@ import {
   StatusBadge,
   SurfaceCard
 } from '../components/AppUI';
-import { formatCountdown, queueSnapshot } from '../utils/mockData';
+import { formatCountdown } from '../utils/mockData';
+import { useClientSession } from '../utils/session';
 import { useAppTheme } from '../utils/theme';
 
 export default function QueueStatusScreen({ navigation }) {
   const { theme } = useAppTheme();
+  const { currentQueueEntry, myPosition, queueSnapshot, refreshQueueState } = useClientSession();
   const [previewMode, setPreviewMode] = useState('live');
-  const [countdown, setCountdown] = useState(queueSnapshot.countdownSeconds);
+  const [countdown, setCountdown] = useState(queueSnapshot?.countdownSeconds || 0);
 
   useEffect(() => {
-    if (previewMode !== 'live') {
+    refreshQueueState().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setCountdown(queueSnapshot?.countdownSeconds || 0);
+  }, [queueSnapshot?.countdownSeconds]);
+
+  useEffect(() => {
+    if (previewMode !== 'live' || !currentQueueEntry) {
       return undefined;
     }
 
@@ -31,6 +41,8 @@ export default function QueueStatusScreen({ navigation }) {
     return () => clearInterval(interval);
   }, [previewMode]);
 
+  const hasActiveQueue = Boolean(currentQueueEntry && queueSnapshot);
+
   return (
     <ScreenShell
       subtitle="Track your exact place in line with a countdown, arrival window, and queue pass actions."
@@ -40,7 +52,7 @@ export default function QueueStatusScreen({ navigation }) {
 
       {previewMode === 'loading' ? <PreviewLoadingPanel blocks={[180, 220, 90]} /> : null}
 
-      {previewMode === 'empty' ? (
+      {previewMode === 'empty' || (previewMode === 'live' && !hasActiveQueue) ? (
         <EmptyStateCard
           actionLabel="Join a queue"
           description="You are not holding an active queue pass right now. Browse live branches and jump in when you are ready."
@@ -59,7 +71,7 @@ export default function QueueStatusScreen({ navigation }) {
         />
       ) : null}
 
-      {previewMode === 'live' ? (
+      {previewMode === 'live' && hasActiveQueue ? (
         <>
           <LinearGradient
             colors={theme.primaryGradient}
@@ -211,7 +223,7 @@ export default function QueueStatusScreen({ navigation }) {
               ]}
             >
               Head out in about 10 minutes and keep your QR pass ready. This screen is designed to
-              receive live Socket.io updates later without changing the layout.
+              receive live Socket.io updates while your position changes, including turn-soon and now-serving events.
             </Text>
           </SurfaceCard>
 

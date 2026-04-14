@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Card,
@@ -11,46 +11,106 @@ import {
   Select,
   StatusBadge
 } from '../components/AdminUI';
-import { queueManagementEntries, getToneForStatus } from '../services/mockData';
+import { getToneForStatus } from '../services/mockData';
 import { useApp } from '../context/AppContext';
+import { queueAPI } from '../services/api';
+import { getAdminSocket } from '../services/socket';
 
 const statusFilters = ['All', 'Waiting', 'Called', 'In Progress'];
 
+function formatElapsedTime(value) {
+  if (!value) {
+    return '0m';
+  }
+
+  const diffMinutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
+  return `${diffMinutes}m`;
+}
+
+function mapQueueRows(queueData = {}) {
+  return (queueData.entries || []).map((entry) => ({
+    id: String(entry._id),
+    number: entry.queueNumber,
+    customer: entry.userId?.name || 'Walk-in guest',
+    type: entry.type === 'booking' ? 'Booked' : 'Walk-in',
+    barber: entry.barberId?.name || '-',
+    status:
+      entry.status === 'serving'
+        ? 'In Progress'
+        : entry.status.charAt(0).toUpperCase() + entry.status.slice(1),
+    time: formatElapsedTime(entry.joinedAt),
+    eta: `${entry.estimatedWaitTime || 0} min`,
+    service: entry.serviceType || 'Haircut',
+    phone: entry.userId?.phone || '-',
+    raw: entry
+  }));
+}
+
 export default function QueueManagementPage() {
-  const { notify } = useApp();
-  const [queuePaused, setQueuePaused] = useState(false);
+  const { notify, session } = useApp();
+  const shopId = session?.shop?._id;
   const [filter, setFilter] = useState('All');
-  const [rows, setRows] = useState(queueManagementEntries);
+  const [queuePaused, setQueuePaused] = useState(false);
+  const [rows, setRows] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [form, setForm] = useState({
     customer: '',
     service: 'Classic Cut',
     type: 'Walk-in'
   });
 
-  const filteredRows =
-    filter === 'All' ? rows : rows.filter((row) => row.status.toLowerCase() === filter.toLowerCase());
+  const loadQueue = async () => {
+    if (!shopId) {
+      return;
+    }
 
-  const updateRow = (id, nextStatus) => {
-    setRows((current) =>
-      current.map((row) =>
-        row.id === id
-          ? {
-              ...row,
-              status: nextStatus,
-              barber: nextStatus === 'Called' && row.barber === '-' ? 'Auto assign' : row.barber
-            }
-          : row
-      )
-    );
+    setIsLoading(true);
 
-    notify({
-      title: `Queue ${nextStatus}`,
-      message: `${id} was updated to ${nextStatus.toLowerCase()} in the UI preview.`,
-      tone: getToneForStatus(nextStatus)
-    });
+    try {
+      const response = await queueAPI.status(shopId);
+      setRows(mapQueueRows(response.data));
+      setQueuePaused(Boolean(response.data?.queuePaused));
+    } catch (error) {
+      notify({
+        title: 'Queue sync failed',
+        message: error.message,
+        tone: 'danger'
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleCallNext = () => {
+  useEffect(() => {
+    loadQueue();
+  }, [shopId]);
+
+  useEffect(() => {
+    if (!shopId) {
+      return undefined;
+    }
+
+    const socket = getAdminSocket();
+    const handleQueueUpdated = ({ queueData }) => {
+      setRows(mapQueueRows(queueData));
+      setQueuePaused(Boolean(queueData?.queuePaused));
+    };
+
+    socket.emit('join:shop', String(shopId));
+    socket.on('queue:updated', handleQueueUpdated);
+
+    return () => {
+      socket.emit('leave:shop', String(shopId));
+      socket.off('queue:updated', handleQueueUpdated);
+    };
+  }, [shopId]);
+
+  const filteredRows = useMemo(
+    () => (filter === 'All' ? rows : rows.filter((row) => row.status.toLowerCase() === filter.toLowerCase())),
+    [rows, filter]
+  );
+
+  const handleCallNext = async () => {
     if (queuePaused) {
       notify({
         title: 'Queue paused',
@@ -60,21 +120,24 @@ export default function QueueManagementPage() {
       return;
     }
 
-    const nextWaiting = rows.find((row) => row.status === 'Waiting');
-
-    if (!nextWaiting) {
+    try {
+      const response = await queueAPI.callNext({ shopId });
+      setRows(mapQueueRows(response.data?.queueData));
       notify({
-        title: 'Queue empty',
-        message: 'There are no waiting customers left in the mock queue.',
-        tone: 'slate'
+        title: 'Next customer called',
+        message: `Queue #${response.data?.queueEntry?.queueNumber || ''} was called to the chair.`,
+        tone: 'success'
       });
-      return;
+    } catch (error) {
+      notify({
+        title: 'Queue action failed',
+        message: error.message,
+        tone: 'danger'
+      });
     }
-
-    updateRow(nextWaiting.id, 'Called');
   };
 
-  const handleAddCustomer = (event) => {
+  const handleAddCustomer = async (event) => {
     event.preventDefault();
 
     if (!form.customer.trim()) {
@@ -86,35 +149,90 @@ export default function QueueManagementPage() {
       return;
     }
 
-    const nextNumber = Math.max(...rows.map((row) => row.number)) + 1;
+    try {
+      const response = await queueAPI.join(
+        {
+          shopId,
+          serviceType: form.service,
+          type: form.type.toLowerCase()
+        },
+        { skipAuth: true }
+      );
 
-    setRows((current) => [
-      ...current,
-      {
-        id: `Q${nextNumber}`,
-        number: nextNumber,
-        customer: form.customer.trim(),
-        type: form.type,
-        barber: '-',
-        status: 'Waiting',
-        time: '0m',
-        eta: '22 min',
-        service: form.service,
-        phone: '+60 1X-XXX XXXX'
+      setRows(mapQueueRows(response.data?.queueData));
+      setForm({
+        customer: '',
+        service: 'Classic Cut',
+        type: 'Walk-in'
+      });
+
+      notify({
+        title: 'Customer added',
+        message: `Queue #${response.data?.queueEntry?.queueNumber || ''} was added to the live queue.`,
+        tone: 'success'
+      });
+    } catch (error) {
+      notify({
+        title: 'Add customer failed',
+        message: error.message,
+        tone: 'danger'
+      });
+    }
+  };
+
+  const updateRow = async (row, action) => {
+    try {
+      let response;
+
+      if (action === 'call') {
+        response = await queueAPI.callNext({ shopId });
+      } else if (action === 'start') {
+        response = await queueAPI.startService(row.id, { barberId: row.raw?.barberId?._id || row.raw?.barberId || undefined });
+      } else if (action === 'complete') {
+        response = await queueAPI.completeService(row.id);
+      } else if (action === 'no-show') {
+        response = await queueAPI.markNoShow(row.id);
       }
-    ]);
 
-    setForm({
-      customer: '',
-      service: 'Classic Cut',
-      type: 'Walk-in'
-    });
+      if (response?.data?.queueData) {
+        setRows(mapQueueRows(response.data.queueData));
+      } else {
+        loadQueue();
+      }
 
-    notify({
-      title: 'Customer added',
-      message: `Queue #${nextNumber} was inserted into the demo queue.`,
-      tone: 'success'
-    });
+      notify({
+        title: 'Queue updated',
+        message: `${row.customer} was updated successfully.`,
+        tone: 'success'
+      });
+    } catch (error) {
+      notify({
+        title: 'Queue action failed',
+        message: error.message,
+        tone: 'danger'
+      });
+    }
+  };
+
+  const toggleQueuePause = async () => {
+    try {
+      const response = queuePaused
+        ? await queueAPI.resume({ shopId })
+        : await queueAPI.pause({ shopId, reason: 'Paused from admin dashboard.' });
+      setRows(mapQueueRows(response.data?.queueData));
+      setQueuePaused(!queuePaused);
+      notify({
+        title: queuePaused ? 'Queue resumed' : 'Queue paused',
+        message: queuePaused ? 'Customers can join again.' : 'New joins are temporarily blocked.',
+        tone: queuePaused ? 'success' : 'warning'
+      });
+    } catch (error) {
+      notify({
+        title: 'Queue status update failed',
+        message: error.message,
+        tone: 'danger'
+      });
+    }
   };
 
   const queueColumns = [
@@ -139,13 +257,22 @@ export default function QueueManagementPage() {
       sortable: false,
       render: (row) => (
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => updateRow(row.id, 'Called')} size="sm" tone="secondary">
-            Call
-          </Button>
-          <Button onClick={() => updateRow(row.id, 'Completed')} size="sm" tone="success">
-            Complete
-          </Button>
-          <Button onClick={() => updateRow(row.id, 'No-show')} size="sm" tone="danger">
+          {row.status === 'Waiting' ? (
+            <Button onClick={() => updateRow(row, 'call')} size="sm" tone="secondary">
+              Call
+            </Button>
+          ) : null}
+          {row.status === 'Called' ? (
+            <Button onClick={() => updateRow(row, 'start')} size="sm" tone="secondary">
+              Start
+            </Button>
+          ) : null}
+          {row.status === 'In Progress' ? (
+            <Button onClick={() => updateRow(row, 'complete')} size="sm" tone="success">
+              Complete
+            </Button>
+          ) : null}
+          <Button onClick={() => updateRow(row, 'no-show')} size="sm" tone="danger">
             No-show
           </Button>
         </div>
@@ -162,7 +289,7 @@ export default function QueueManagementPage() {
               <Icon name="spark" />
               Call next
             </Button>
-            <Button onClick={() => setQueuePaused((current) => !current)} tone={queuePaused ? 'danger' : 'primary'}>
+            <Button onClick={toggleQueuePause} tone={queuePaused ? 'danger' : 'primary'}>
               <Icon name={queuePaused ? 'close' : 'clock'} />
               {queuePaused ? 'Resume queue' : 'Pause queue'}
             </Button>
@@ -203,6 +330,7 @@ export default function QueueManagementPage() {
           rows={filteredRows}
           searchPlaceholder="Search customer, queue number, or status"
           title="Live queue display"
+          emptyMessage={isLoading ? 'Loading queue...' : 'No queue entries yet.'}
         />
 
         <Card

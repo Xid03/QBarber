@@ -1,7 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   ActionButton,
   EmptyStateCard,
@@ -14,22 +14,45 @@ import {
   SurfaceCard
 } from '../components/AppUI';
 import QueueSmartLogo from '../components/QueueSmartLogo';
-import { barbers, branches, getInitials, queueSnapshot } from '../utils/mockData';
+import { getInitials } from '../utils/mockData';
+import { useClientSession } from '../utils/session';
 import { useAppTheme } from '../utils/theme';
 
 export default function HomeScreen({ navigation }) {
   const { theme, toggleTheme } = useAppTheme();
-  const [selectedBranchId, setSelectedBranchId] = useState(branches[0].id);
+  const {
+    branches,
+    selectedBranchId,
+    selectedBranch,
+    selectBranch,
+    barbers,
+    queueSnapshot,
+    currentQueueEntry,
+    error,
+    isRefreshing,
+    joinQueueRemote,
+    refreshHomeData
+  } = useClientSession();
   const [previewMode, setPreviewMode] = useState('live');
 
-  const selectedBranch = useMemo(
-    () => branches.find((branch) => branch.id === selectedBranchId) || branches[0],
-    [selectedBranchId]
-  );
+  useEffect(() => {
+    refreshHomeData().catch(() => {});
+  }, []);
 
   const headerAction = (
     <IconButton icon={theme.isDark ? 'sun' : 'moon'} onPress={toggleTheme} tone="default" />
   );
+
+  const handleJoinQueue = async () => {
+    try {
+      await joinQueueRemote({ serviceType: 'haircut', type: 'walk-in' });
+      navigation.navigate('JoinQueueConfirmation');
+    } catch (nextError) {
+      Alert.alert('Unable to join queue', nextError.message);
+    }
+  };
+
+  const liveModeUnavailable = !selectedBranch || !queueSnapshot;
 
   return (
     <ScreenShell
@@ -39,28 +62,36 @@ export default function HomeScreen({ navigation }) {
     >
       <StatePreviewSwitcher mode={previewMode} onChange={setPreviewMode} />
 
-      {previewMode === 'loading' ? <PreviewLoadingPanel /> : null}
+      {previewMode === 'loading' || (previewMode === 'live' && isRefreshing && liveModeUnavailable) ? (
+        <PreviewLoadingPanel />
+      ) : null}
 
       {previewMode === 'empty' ? (
         <EmptyStateCard
           actionLabel="Refresh nearby branches"
           description="No active branches are broadcasting queue data right now. You can still browse premium slots later."
           icon="map-pin"
-          onAction={() => setPreviewMode('live')}
+          onAction={() => {
+            setPreviewMode('live');
+            refreshHomeData().catch(() => {});
+          }}
           title="No live branches nearby"
         />
       ) : null}
 
-      {previewMode === 'error' ? (
+      {previewMode === 'error' || (previewMode === 'live' && error && liveModeUnavailable) ? (
         <ErrorStateCard
           actionLabel="Retry preview"
-          description="The mock queue feed failed to load. This screen includes the error state styling we can reuse once APIs are connected."
-          onAction={() => setPreviewMode('live')}
+          description={error || 'The queue feed is offline right now. Check your API URL and server status, then try again.'}
+          onAction={() => {
+            setPreviewMode('live');
+            refreshHomeData().catch(() => {});
+          }}
           title="Queue feed offline"
         />
       ) : null}
 
-      {previewMode === 'live' ? (
+      {previewMode === 'live' && !liveModeUnavailable ? (
         <>
           <LinearGradient
             colors={theme.primaryGradient}
@@ -72,12 +103,7 @@ export default function HomeScreen({ navigation }) {
               <View style={styles.heroBrandWrap}>
                 <QueueSmartLogo size={42} />
                 <View style={styles.heroBrandCopy}>
-                  <Text
-                    style={[
-                      styles.heroBrand,
-                      { color: '#FFFFFF', fontFamily: theme.typography.title }
-                    ]}
-                  >
+                  <Text style={[styles.heroBrand, { color: '#FFFFFF', fontFamily: theme.typography.title }]}>
                     QBarber
                   </Text>
                   <Text
@@ -90,15 +116,14 @@ export default function HomeScreen({ navigation }) {
                   </Text>
                 </View>
               </View>
-              <StatusBadge icon="radio" label="Live queue pulse" tone="primary" />
+              <StatusBadge
+                icon={isRefreshing ? 'refresh-cw' : 'radio'}
+                label={queueSnapshot.queuePaused ? 'Queue paused' : 'Live queue pulse'}
+                tone={queueSnapshot.queuePaused ? 'warning' : 'primary'}
+              />
             </View>
 
-            <Text
-              style={[
-                styles.heroTitle,
-                { color: '#FFFFFF', fontFamily: theme.typography.display }
-              ]}
-            >
+            <Text style={[styles.heroTitle, { color: '#FFFFFF', fontFamily: theme.typography.display }]}>
               Now serving #{queueSnapshot.nowServing}
             </Text>
             <Text
@@ -112,58 +137,28 @@ export default function HomeScreen({ navigation }) {
 
             <View style={styles.heroStats}>
               <View style={styles.heroStatItem}>
-                <Text
-                  style={[
-                    styles.heroStatValue,
-                    { color: '#FFFFFF', fontFamily: theme.typography.title }
-                  ]}
-                >
+                <Text style={[styles.heroStatValue, { color: '#FFFFFF', fontFamily: theme.typography.title }]}>
                   {queueSnapshot.waitingCount}
                 </Text>
-                <Text
-                  style={[
-                    styles.heroStatLabel,
-                    { color: 'rgba(255,255,255,0.74)', fontFamily: theme.typography.body }
-                  ]}
-                >
+                <Text style={[styles.heroStatLabel, { color: 'rgba(255,255,255,0.74)', fontFamily: theme.typography.body }]}>
                   Customers waiting
                 </Text>
               </View>
 
               <View style={styles.heroStatItem}>
-                <Text
-                  style={[
-                    styles.heroStatValue,
-                    { color: '#FFFFFF', fontFamily: theme.typography.title }
-                  ]}
-                >
+                <Text style={[styles.heroStatValue, { color: '#FFFFFF', fontFamily: theme.typography.title }]}>
                   {queueSnapshot.activeBarbers}/{queueSnapshot.totalBarbers}
                 </Text>
-                <Text
-                  style={[
-                    styles.heroStatLabel,
-                    { color: 'rgba(255,255,255,0.74)', fontFamily: theme.typography.body }
-                  ]}
-                >
+                <Text style={[styles.heroStatLabel, { color: 'rgba(255,255,255,0.74)', fontFamily: theme.typography.body }]}>
                   Barbers active
                 </Text>
               </View>
 
               <View style={styles.heroStatItem}>
-                <Text
-                  style={[
-                    styles.heroStatValue,
-                    { color: '#FFFFFF', fontFamily: theme.typography.title }
-                  ]}
-                >
-                  ~{selectedBranch.waitMinutes}m
+                <Text style={[styles.heroStatValue, { color: '#FFFFFF', fontFamily: theme.typography.title }]}>
+                  ~{selectedBranch.waitMinutes || queueSnapshot.estimatedWait}m
                 </Text>
-                <Text
-                  style={[
-                    styles.heroStatLabel,
-                    { color: 'rgba(255,255,255,0.74)', fontFamily: theme.typography.body }
-                  ]}
-                >
+                <Text style={[styles.heroStatLabel, { color: 'rgba(255,255,255,0.74)', fontFamily: theme.typography.body }]}>
                   Estimated wait
                 </Text>
               </View>
@@ -171,19 +166,10 @@ export default function HomeScreen({ navigation }) {
           </LinearGradient>
 
           <SurfaceCard>
-            <Text
-              style={[
-                styles.sectionTitle,
-                { color: theme.text, fontFamily: theme.typography.title }
-              ]}
-            >
+            <Text style={[styles.sectionTitle, { color: theme.text, fontFamily: theme.typography.title }]}>
               Choose a branch
             </Text>
-            <ScrollView
-              contentContainerStyle={styles.branchRow}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-            >
+            <ScrollView contentContainerStyle={styles.branchRow} horizontal showsHorizontalScrollIndicator={false}>
               {branches.map((branch) => {
                 const isSelected = branch.id === selectedBranchId;
 
@@ -191,7 +177,7 @@ export default function HomeScreen({ navigation }) {
                   <Pressable
                     key={branch.id}
                     accessibilityRole="button"
-                    onPress={() => setSelectedBranchId(branch.id)}
+                    onPress={() => selectBranch(branch.id)}
                     style={[
                       styles.branchCard,
                       {
@@ -200,25 +186,15 @@ export default function HomeScreen({ navigation }) {
                       }
                     ]}
                   >
-                    <Text
-                      style={[
-                        styles.branchName,
-                        { color: theme.text, fontFamily: theme.typography.label }
-                      ]}
-                    >
+                    <Text style={[styles.branchName, { color: theme.text, fontFamily: theme.typography.label }]}>
                       {branch.name}
                     </Text>
-                    <Text
-                      style={[
-                        styles.branchMeta,
-                        { color: theme.textMuted, fontFamily: theme.typography.body }
-                      ]}
-                    >
+                    <Text style={[styles.branchMeta, { color: theme.textMuted, fontFamily: theme.typography.body }]}>
                       {branch.distance}
                     </Text>
                     <StatusBadge
                       icon="navigation"
-                      label={`${branch.waitMinutes} min`}
+                      label={`${branch.waitMinutes || queueSnapshot.estimatedWait} min`}
                       tone={isSelected ? 'primary' : 'success'}
                     />
                   </Pressable>
@@ -230,9 +206,13 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.actionStack}>
             <ActionButton
               icon="user-plus"
-              label="Join Queue"
-              onPress={() => navigation.navigate('JoinQueueConfirmation')}
-              subtitle={`Secure queue #${queueSnapshot.queueNumber} remotely`}
+              label={currentQueueEntry ? 'View Queue Pass' : 'Join Queue'}
+              onPress={currentQueueEntry ? () => navigation.navigate('JoinQueueConfirmation') : handleJoinQueue}
+              subtitle={
+                currentQueueEntry
+                  ? `Queue #${currentQueueEntry.queueNumber} is already active`
+                  : `Secure queue #${queueSnapshot.queueNumber} remotely`
+              }
             />
             <ActionButton
               icon="calendar"
@@ -245,15 +225,10 @@ export default function HomeScreen({ navigation }) {
 
           <SurfaceCard tone="accent">
             <View style={styles.sectionHeader}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  { color: theme.text, fontFamily: theme.typography.title }
-                ]}
-              >
+              <Text style={[styles.sectionTitle, { color: theme.text, fontFamily: theme.typography.title }]}>
                 Today&apos;s floor lineup
               </Text>
-              <StatusBadge icon="scissors" label="3 chairs moving" tone="success" />
+              <StatusBadge icon="scissors" label={`${queueSnapshot.activeBarbers} chairs moving`} tone="success" />
             </View>
             <View style={styles.barberGrid}>
               {barbers.map((barber) => (
@@ -268,38 +243,18 @@ export default function HomeScreen({ navigation }) {
                   ]}
                 >
                   <View style={[styles.avatar, { backgroundColor: theme.surfaceStrong }]}>
-                    <Text
-                      style={[
-                        styles.avatarText,
-                        { color: theme.primary, fontFamily: theme.typography.title }
-                      ]}
-                    >
+                    <Text style={[styles.avatarText, { color: theme.primary, fontFamily: theme.typography.title }]}>
                       {getInitials(barber.name)}
                     </Text>
                   </View>
                   <View style={styles.barberCopy}>
-                    <Text
-                      style={[
-                        styles.barberName,
-                        { color: theme.text, fontFamily: theme.typography.label }
-                      ]}
-                    >
+                    <Text style={[styles.barberName, { color: theme.text, fontFamily: theme.typography.label }]}>
                       {barber.name}
                     </Text>
-                    <Text
-                      style={[
-                        styles.barberMeta,
-                        { color: theme.textMuted, fontFamily: theme.typography.body }
-                      ]}
-                    >
+                    <Text style={[styles.barberMeta, { color: theme.textMuted, fontFamily: theme.typography.body }]}>
                       {barber.specialty}
                     </Text>
-                    <Text
-                      style={[
-                        styles.barberMeta,
-                        { color: theme.textMuted, fontFamily: theme.typography.body }
-                      ]}
-                    >
+                    <Text style={[styles.barberMeta, { color: theme.textMuted, fontFamily: theme.typography.body }]}>
                       {barber.average}
                     </Text>
                   </View>
@@ -315,24 +270,13 @@ export default function HomeScreen({ navigation }) {
 
           <SurfaceCard tone="success">
             <View style={styles.sectionHeader}>
-              <Text
-                style={[
-                  styles.sectionTitle,
-                  { color: theme.text, fontFamily: theme.typography.title }
-                ]}
-              >
+              <Text style={[styles.sectionTitle, { color: theme.text, fontFamily: theme.typography.title }]}>
                 Queue intelligence
               </Text>
               <Feather color={theme.success} name="trending-up" size={18} />
             </View>
-            <Text
-              style={[
-                styles.intelligenceText,
-                { color: theme.textMuted, fontFamily: theme.typography.body }
-              ]}
-            >
-              Smart estimates combine active chairs, live service pacing, and your chosen branch to
-              help you leave at the right moment.
+            <Text style={[styles.intelligenceText, { color: theme.textMuted, fontFamily: theme.typography.body }]}>
+              Smart estimates combine active chairs, real service pacing, and booking priority to help you leave at the right moment.
             </Text>
           </SurfaceCard>
         </>
