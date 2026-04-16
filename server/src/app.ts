@@ -9,10 +9,11 @@ import { publicShopRouter } from './routes/public/shops.js';
 
 export function createApp() {
   const app = express();
+  const allowedOrigins = env.CLIENT_URL.split(',').map((origin) => origin.trim());
 
   app.use(
     cors({
-      origin: env.CLIENT_URL
+      origin: allowedOrigins
     })
   );
   app.use(express.json());
@@ -20,7 +21,10 @@ export function createApp() {
   app.get('/api/health', (_req, res) => {
     res.json({
       success: true,
-      message: 'QFlow server placeholder is running.'
+      message: 'QFlow server is running.',
+      data: {
+        environment: env.NODE_ENV
+      }
     });
   });
 

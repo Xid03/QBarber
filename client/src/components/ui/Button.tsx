@@ -8,14 +8,17 @@ type ButtonProps = PropsWithChildren<
 
 export function Button({ children, className = '', variant = 'primary', ...props }: ButtonProps) {
   const variants = {
-    primary: 'bg-brand-600 text-white hover:bg-brand-700',
-    secondary: 'border border-slate-200 bg-white text-slate-950 hover:bg-slate-50',
-    ghost: 'bg-transparent text-brand-600 hover:bg-brand-100'
+    primary:
+      'bg-brand-600 text-white shadow-soft hover:-translate-y-0.5 hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40',
+    secondary:
+      'glass-panel border border-white/70 bg-white/80 text-slate-950 hover:-translate-y-0.5 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/25',
+    ghost:
+      'bg-transparent text-brand-700 hover:bg-brand-100/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/25'
   };
 
   return (
     <button
-      className={`rounded-md px-4 py-3 text-sm font-semibold transition ${variants[variant]} ${className}`}
+      className={`rounded-md px-4 py-3 text-sm font-semibold transition duration-200 disabled:cursor-not-allowed disabled:opacity-60 ${variants[variant]} ${className}`}
       {...props}
     >
       {children}

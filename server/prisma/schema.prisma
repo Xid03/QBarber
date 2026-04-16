@@ -25,6 +25,8 @@ model Shop {
   slug              String            @unique
   status            ShopStatus        @default(OPEN)
   timezone          String            @default("Asia/Kuala_Lumpur")
+  phone             String?
+  address           String?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
   adminUsers        AdminUser[]
@@ -40,6 +42,7 @@ model AdminUser {
   shopId       String
   username     String   @unique
   passwordHash String
+  displayName  String
   role         String   @default("ADMIN")
   createdAt    DateTime @default(now())
   shop         Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -67,6 +70,7 @@ model ServiceType {
   queueEntries    QueueEntry[]
   shop            Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
+  @@unique([shopId, name])
   @@index([shopId, isActive])
 }
 
@@ -75,6 +79,7 @@ model Barber {
   shopId      String
   name        String
   isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
   queueEntries QueueEntry[]
   shop        Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
@@ -87,6 +92,8 @@ model Customer {
   phone       String?
   createdAt   DateTime     @default(now())
   queueEntries QueueEntry[]
+
+  @@index([phone])
 }
 
 model QueueEntry {
@@ -102,6 +109,8 @@ model QueueEntry {
   startedAt            DateTime?
   completedAt          DateTime?
   removedReason        String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
   barber               Barber?          @relation(fields: [barberId], references: [id])
   customer             Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
   serviceType          ServiceType      @relation(fields: [serviceTypeId], references: [id], onDelete: Restrict)

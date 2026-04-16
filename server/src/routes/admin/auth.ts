@@ -1,7 +1,10 @@
 import { Router } from 'express';
 
+import { loginAdmin } from '../../controllers/admin-auth-controller.js';
+import { asyncHandler } from '../../middleware/async-handler.js';
+import { validateRequest } from '../../middleware/validate.js';
+import { adminLoginSchema } from '../../validation/schemas.js';
+
 export const adminAuthRouter = Router();
 
-adminAuthRouter.post('/login', (_req, res) => {
-  res.json({ message: 'TODO: POST /api/admin/auth/login' });
-});
+adminAuthRouter.post('/login', validateRequest({ body: adminLoginSchema }), asyncHandler(loginAdmin));

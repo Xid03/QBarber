@@ -1,27 +1,63 @@
 import { Router } from 'express';
 
+import {
+  getFullQueue,
+  getPublicAnalytics,
+  getQueueEntry,
+  getShopStatus,
+  joinQueue,
+  leaveQueue
+} from '../../controllers/public-shop-controller.js';
+import { getShopBySlug } from '../../controllers/public-shop-metadata-controller.js';
+import { asyncHandler } from '../../middleware/async-handler.js';
+import { validateRequest } from '../../middleware/validate.js';
+import {
+  joinQueueSchema,
+  queueEntryParamsSchema,
+  shopSlugParamsSchema,
+  shopParamsSchema
+} from '../../validation/schemas.js';
+
 export const publicShopRouter = Router();
 
-publicShopRouter.get('/:shopId/status', (_req, res) => {
-  res.json({ message: 'TODO: GET /api/shops/:shopId/status' });
-});
+publicShopRouter.get(
+  '/by-slug/:slug',
+  validateRequest({ params: shopSlugParamsSchema }),
+  asyncHandler(getShopBySlug)
+);
 
-publicShopRouter.get('/:shopId/queue', (_req, res) => {
-  res.json({ message: 'TODO: GET /api/shops/:shopId/queue' });
-});
+publicShopRouter.get(
+  '/:shopId/status',
+  validateRequest({ params: shopParamsSchema }),
+  asyncHandler(getShopStatus)
+);
 
-publicShopRouter.post('/:shopId/queue/join', (_req, res) => {
-  res.status(202).json({ message: 'TODO: POST /api/shops/:shopId/queue/join' });
-});
+publicShopRouter.get(
+  '/:shopId/queue',
+  validateRequest({ params: shopParamsSchema }),
+  asyncHandler(getFullQueue)
+);
 
-publicShopRouter.get('/:shopId/queue/:entryId', (_req, res) => {
-  res.json({ message: 'TODO: GET /api/shops/:shopId/queue/:entryId' });
-});
+publicShopRouter.post(
+  '/:shopId/queue/join',
+  validateRequest({ params: shopParamsSchema, body: joinQueueSchema }),
+  asyncHandler(joinQueue)
+);
 
-publicShopRouter.delete('/:shopId/queue/:entryId', (_req, res) => {
-  res.json({ message: 'TODO: DELETE /api/shops/:shopId/queue/:entryId' });
-});
+publicShopRouter.get(
+  '/:shopId/queue/:entryId',
+  validateRequest({ params: queueEntryParamsSchema }),
+  asyncHandler(getQueueEntry)
+);
 
-publicShopRouter.get('/:shopId/analytics/public', (_req, res) => {
-  res.json({ message: 'TODO: GET /api/shops/:shopId/analytics/public' });
-});
+publicShopRouter.delete(
+  '/:shopId/queue/:entryId',
+  validateRequest({ params: queueEntryParamsSchema }),
+  asyncHandler(leaveQueue)
+);
+
+publicShopRouter.get(
+  '/:shopId/analytics/public',
+  validateRequest({ params: shopParamsSchema }),
+  asyncHandler(getPublicAnalytics)
+);

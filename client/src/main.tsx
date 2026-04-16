@@ -6,11 +6,14 @@ import { RouterProvider } from 'react-router-dom';
 import './index.css';
 import { queryClient } from './lib/query-client';
 import { router } from './app/router';
+import { AdminAuthProvider } from './features/admin/auth-context';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
+      <AdminAuthProvider>
+        <RouterProvider router={router} />
+      </AdminAuthProvider>
     </QueryClientProvider>
   </React.StrictMode>
 );
