@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+.vite
+.turbo
+client/dist
+server/dist
+.env

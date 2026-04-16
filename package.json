@@ -1,11 +1,10 @@
 {
-  "name": "smart-queue-system",
+  "name": "qflow-queue-management-system",
   "version": "0.1.0",
   "private": true,
-  "description": "Monorepo for a smart queue management system for barbershops.",
+  "description": "QFlow monorepo for a queue management system for barbershops.",
   "workspaces": [
-    "client-mobile",
-    "client-web",
+    "client",
     "server",
     "shared"
   ],
@@ -16,8 +15,10 @@
   "scripts": {
     "install:all": "npm install --workspaces",
     "lint": "npm run lint --workspaces --if-present",
-    "dev:mobile": "npm run start --workspace @smart-queue/client-mobile",
-    "dev:web": "npm run start --workspace @smart-queue/client-web",
-    "dev:server": "npm run dev --workspace @smart-queue/server"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "dev:client": "npm run dev --workspace @qflow/client",
+    "dev:server": "npm run dev --workspace @qflow/server",
+    "prisma:generate": "npm run prisma:generate --workspace @qflow/server"
   }
 }

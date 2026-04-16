@@ -7,10 +7,13 @@ coverage/
 .env
 .env.local
 .env.production
+.env.*
+!.env.example
+.vite/
+*.tsbuildinfo
 .DS_Store
 Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-

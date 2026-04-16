@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum QueueEntryStatus {
+  WAITING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum ShopStatus {
+  OPEN
+  CLOSED
+}
+
+model Shop {
+  id                String            @id @default(cuid())
+  name              String
+  slug              String            @unique
+  status            ShopStatus        @default(OPEN)
+  timezone          String            @default("Asia/Kuala_Lumpur")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  adminUsers        AdminUser[]
+  barbers           Barber[]
+  operatingHours    OperatingHour[]
+  queueEntries      QueueEntry[]
+  serviceTypes      ServiceType[]
+  analyticsSnapshots AnalyticsSnapshot[]
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  shopId       String
+  username     String   @unique
+  passwordHash String
+  role         String   @default("ADMIN")
+  createdAt    DateTime @default(now())
+  shop         Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+model OperatingHour {
+  id        String   @id @default(cuid())
+  shopId    String
+  dayOfWeek Int
+  opensAt   String
+  closesAt  String
+  isEnabled Boolean  @default(true)
+  shop      Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, dayOfWeek])
+}
+
+model ServiceType {
+  id              String       @id @default(cuid())
+  shopId          String
+  name            String
+  durationMinutes Int
+  priceCents      Int
+  isActive        Boolean      @default(true)
+  queueEntries    QueueEntry[]
+  shop            Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, isActive])
+}
+
+model Barber {
+  id          String       @id @default(cuid())
+  shopId      String
+  name        String
+  isActive    Boolean      @default(true)
+  queueEntries QueueEntry[]
+  shop        Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, isActive])
+}
+
+model Customer {
+  id          String       @id @default(cuid())
+  name        String
+  phone       String?
+  createdAt   DateTime     @default(now())
+  queueEntries QueueEntry[]
+}
+
+model QueueEntry {
+  id                   String           @id @default(cuid())
+  shopId               String
+  customerId           String
+  serviceTypeId        String
+  barberId             String?
+  status               QueueEntryStatus @default(WAITING)
+  position             Int
+  estimatedWaitMinutes Int              @default(0)
+  joinedAt             DateTime         @default(now())
+  startedAt            DateTime?
+  completedAt          DateTime?
+  removedReason        String?
+  barber               Barber?          @relation(fields: [barberId], references: [id])
+  customer             Customer         @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  serviceType          ServiceType      @relation(fields: [serviceTypeId], references: [id], onDelete: Restrict)
+  shop                 Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, status, position])
+  @@index([customerId, joinedAt])
+}
+
+model AnalyticsSnapshot {
+  id             String   @id @default(cuid())
+  shopId         String
+  snapshotDate   DateTime
+  servedCount    Int
+  averageWaitMin Int
+  revenueCents   Int
+  shop           Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, snapshotDate])
+}
