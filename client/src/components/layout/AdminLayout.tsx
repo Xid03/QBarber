@@ -69,6 +69,9 @@ export function AdminLayout({ children, title, description, actions, connectionS
                 <span className="hidden sm:inline">{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
               </button>
               {connectionState ? <ConnectionStatusBadge state={connectionState} /> : null}
+              <div className="md:hidden">
+                <LogoutButton compact />
+              </div>
               <div className="hidden md:block">
                 <LogoutButton />
               </div>
@@ -113,9 +116,6 @@ export function AdminLayout({ children, title, description, actions, connectionS
               label="Settings"
               isActive={location.pathname === '/admin/settings'}
             />
-            <div className="ml-auto">
-              <LogoutButton />
-            </div>
           </nav>
 
           <div className="grid gap-6">{children}</div>

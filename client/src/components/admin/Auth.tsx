@@ -127,14 +127,22 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-export function LogoutButton() {
+export function LogoutButton({
+  className = '',
+  compact = false
+}: {
+  className?: string;
+  compact?: boolean;
+}) {
   const navigate = useNavigate();
   const { logout } = useAdminAuth();
 
   return (
     <Button
       variant="secondary"
-      className="admin-logout-button inline-flex items-center gap-2 rounded-xl border-slate-200 bg-slate-50/90 px-3.5 py-2.5 text-slate-700 shadow-sm hover:bg-white hover:shadow-md"
+      className={`admin-logout-button inline-flex items-center rounded-xl border-slate-200 bg-slate-50/90 text-slate-700 shadow-sm hover:bg-white hover:shadow-md ${
+        compact ? 'justify-center px-3 py-2.5' : 'gap-2 px-3.5 py-2.5'
+      } ${className}`}
       aria-label="Sign out of the admin dashboard"
       onClick={() => {
         logout();
@@ -142,7 +150,7 @@ export function LogoutButton() {
       }}
     >
       <LogOut size={16} />
-      Sign out
+      {compact ? null : 'Sign out'}
     </Button>
   );
 }
