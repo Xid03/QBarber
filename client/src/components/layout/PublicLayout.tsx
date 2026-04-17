@@ -1,28 +1,32 @@
 import type { PropsWithChildren, ReactNode } from 'react';
-import { BellRing, Clock3, MapPin, Phone, Scissors } from 'lucide-react';
+import { BellRing, Clock3, MapPin, Phone } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
+import { Logo } from '../Logo';
 import type { ShopMetadata } from '../../features/public/types';
+import type { LiveConnectionState } from '../../features/realtime/socket-provider';
 import { formatUpdatedAt } from '../../features/public/formatters';
 import { Card } from '../ui/Card';
+import { ConnectionStatusBadge } from '../ui/ConnectionStatusBadge';
 import { StatusBadge } from '../ui/StatusBadge';
 
 type PublicLayoutProps = PropsWithChildren<{
   shop?: ShopMetadata;
   lastUpdated?: Date;
   actions?: ReactNode;
+  connectionState?: LiveConnectionState;
 }>;
 
-export function PublicLayout({ children, shop, lastUpdated, actions }: PublicLayoutProps) {
+export function PublicLayout({ children, shop, lastUpdated, actions, connectionState }: PublicLayoutProps) {
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 px-4 py-4 sm:px-6 sm:py-6">
+    <div className="page-shell mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-5 px-4 py-4 sm:px-6 sm:py-6">
       <header className="glass-panel overflow-hidden rounded-lg shadow-soft">
         <div className="flex flex-col gap-5 px-5 py-5 sm:px-7 sm:py-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-600 text-white shadow-soft">
-                  <Scissors size={22} />
+                <div className="shadow-soft">
+                  <Logo size={48} />
                 </div>
                 <div>
                   <p className="section-label">QFlow Live Queue</p>
@@ -37,6 +41,7 @@ export function PublicLayout({ children, shop, lastUpdated, actions }: PublicLay
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
+              {connectionState ? <ConnectionStatusBadge state={connectionState} /> : null}
               <StatusBadge
                 label={shop?.isOpen ? 'Open now' : 'Currently closed'}
                 tone={shop?.isOpen ? 'success' : 'danger'}
@@ -66,7 +71,7 @@ export function PublicLayout({ children, shop, lastUpdated, actions }: PublicLay
             <TopNavLink to="/queue" label="Queue status" />
             <TopNavLink to="/queue/join" label="Join queue" />
             <TopNavLink to="/queue/history" label="Best times" />
-            <TopNavLink to="/admin/login" label="Admin sign in" icon={<BellRing size={14} />} />
+            <TopNavLink to="/admin/login" label="Admin sign in" icon={<BellRing size={14} />} emphasize />
           </nav>
         </div>
       </header>
@@ -75,23 +80,36 @@ export function PublicLayout({ children, shop, lastUpdated, actions }: PublicLay
 
       <Card className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-sm text-muted">
-          QFlow keeps this page fresh with regular check-ins, so customers can judge the queue before
-          they leave home.
+          QFlow now uses live queue updates when the socket is connected, and falls back to scheduled refreshes if the connection drops.
         </p>
         <div className="flex items-center gap-3 text-sm text-muted">
-          <span className="inline-flex h-2.5 w-2.5 rounded-full bg-success-600" />
-          <span>Polling every 30 seconds on public views</span>
+          {connectionState ? <ConnectionStatusBadge state={connectionState} /> : null}
         </div>
       </Card>
     </div>
   );
 }
 
-function TopNavLink({ to, label, icon }: { to: string; label: string; icon?: ReactNode }) {
+function TopNavLink({
+  to,
+  label,
+  icon,
+  emphasize = false
+}: {
+  to: string;
+  label: string;
+  icon?: ReactNode;
+  emphasize?: boolean;
+}) {
   return (
     <Link
       to={to}
-      className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/70 px-4 py-2 text-sm font-medium text-slate-700 transition hover:-translate-y-0.5 hover:bg-white"
+      className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold shadow-sm transition duration-200 ${
+        emphasize
+          ? 'border-brand-600 bg-brand-600 text-white hover:-translate-y-0.5 hover:bg-brand-700 hover:shadow-md'
+          : 'border-slate-200 bg-white text-slate-700 hover:-translate-y-0.5 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-950 hover:shadow-md'
+      }`}
+      aria-label={label}
     >
       {icon}
       {label}

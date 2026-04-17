@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { PublicLayout } from '../../components/layout/PublicLayout';
@@ -10,20 +11,41 @@ import {
 } from '../../components/public/QueueComponents';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
+import { useToast } from '../../features/feedback/toast-provider';
 import { getApiErrorMessage, useEntryStatus, useLeaveQueue, usePublicShop } from '../../features/public/hooks';
+import { useRealtimeShopSync } from '../../features/realtime/hooks';
 
 export function MyPositionPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { showToast } = useToast();
   const { entryId = '' } = useParams();
   const shopQuery = usePublicShop();
+  const { connectionState } = useRealtimeShopSync({
+    shopId: shopQuery.data?.id,
+    entryId,
+    audience: 'public'
+  });
   const entryQuery = useEntryStatus(shopQuery.data?.id, entryId);
   const leaveQueueMutation = useLeaveQueue(shopQuery.data?.id);
   const joinedFromForm = Boolean((location.state as { joined?: boolean } | null)?.joined);
 
+  useEffect(() => {
+    if (!joinedFromForm || !entryQuery.data) {
+      return;
+    }
+
+    showToast({
+      title: 'Added to queue',
+      message: `You're in line at position #${entryQuery.data.entry.position}.`
+    });
+
+    navigate(location.pathname, { replace: true });
+  }, [entryQuery.data, joinedFromForm, location.pathname, navigate, showToast]);
+
   if (shopQuery.isError || entryQuery.isError) {
     return (
-      <PublicLayout shop={shopQuery.data}>
+      <PublicLayout shop={shopQuery.data} connectionState={connectionState}>
         <ErrorStateCard
           title="We couldn't load your live queue status."
           message={getApiErrorMessage(shopQuery.error ?? entryQuery.error)}
@@ -38,7 +60,7 @@ export function MyPositionPage() {
 
   if (shopQuery.isLoading || entryQuery.isLoading || !shopQuery.data || !entryQuery.data) {
     return (
-      <PublicLayout shop={shopQuery.data}>
+      <PublicLayout shop={shopQuery.data} connectionState={connectionState}>
         <QueueLoadingCard label="Your position" />
       </PublicLayout>
     );
@@ -48,16 +70,9 @@ export function MyPositionPage() {
   const entryStatus = entryQuery.data;
 
   return (
-    <PublicLayout shop={shop} lastUpdated={new Date(entryQuery.dataUpdatedAt)}>
+    <PublicLayout shop={shop} lastUpdated={new Date(entryQuery.dataUpdatedAt)} connectionState={connectionState}>
       <div className="grid gap-4 lg:grid-cols-[1.15fr,0.85fr]">
         <div className="grid gap-4">
-          {joinedFromForm ? (
-            <Card className="border border-success-100 bg-success-100/50">
-              <p className="section-label">You're in the queue</p>
-              <p className="mt-2 text-lg font-semibold">QFlow saved your place and will keep this tracker fresh.</p>
-            </Card>
-          ) : null}
-
           <PositionTracker entry={entryStatus.entry} peopleAheadCount={entryStatus.peopleAhead.length} />
           <PeopleAheadList entries={entryStatus.peopleAhead} />
         </div>

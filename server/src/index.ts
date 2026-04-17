@@ -1,25 +1,14 @@
 import http from 'node:http';
 
-import { Server } from 'socket.io';
-
 import { createApp } from './app.js';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { prisma } from './config/prisma.js';
+import { createSocketServer } from './socket/socket-server.js';
 
 const app = createApp();
 const server = http.createServer(app);
-const allowedOrigins = env.CLIENT_URL.split(',').map((origin) => origin.trim());
-
-const io = new Server(server, {
-  cors: {
-    origin: allowedOrigins
-  }
-});
-
-io.on('connection', (socket) => {
-  logger.info(`Socket connected: ${socket.id}`);
-});
+createSocketServer(server);
 
 async function bootstrap() {
   await prisma.$connect();

@@ -14,9 +14,14 @@ import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { formatOperatingHour } from '../../features/public/formatters';
 import { getApiErrorMessage, usePublicAnalytics, usePublicShop, useQueueStatus } from '../../features/public/hooks';
+import { useRealtimeShopSync } from '../../features/realtime/hooks';
 
 export function QueueStatusPage() {
   const shopQuery = usePublicShop();
+  const { connectionState } = useRealtimeShopSync({
+    shopId: shopQuery.data?.id,
+    audience: 'public'
+  });
   const queueQuery = useQueueStatus(shopQuery.data?.id);
   const analyticsQuery = usePublicAnalytics(shopQuery.data?.id);
   const lastUpdated = queueQuery.dataUpdatedAt ? new Date(queueQuery.dataUpdatedAt) : undefined;
@@ -30,7 +35,7 @@ export function QueueStatusPage() {
 
   if (shopQuery.isLoading || queueQuery.isLoading) {
     return (
-      <PublicLayout lastUpdated={lastUpdated}>
+      <PublicLayout lastUpdated={lastUpdated} connectionState={connectionState}>
         <div className="grid gap-4 sm:grid-cols-2">
           <QueueLoadingCard label="Live queue" />
           <QueueLoadingCard label="Queue pulse" />
@@ -42,7 +47,7 @@ export function QueueStatusPage() {
 
   if (shopQuery.isError || queueQuery.isError || !shopQuery.data || !queueQuery.data) {
     return (
-      <PublicLayout lastUpdated={lastUpdated}>
+      <PublicLayout lastUpdated={lastUpdated} connectionState={connectionState}>
         <ErrorStateCard
           title="We couldn't load the public queue yet."
           message={getApiErrorMessage(shopQuery.error ?? queueQuery.error)}
@@ -62,6 +67,7 @@ export function QueueStatusPage() {
     <PublicLayout
       shop={shop}
       lastUpdated={lastUpdated}
+      connectionState={connectionState}
       actions={
         <Link
           to="/queue/join"
@@ -120,7 +126,7 @@ export function QueueStatusPage() {
                 <Button className="w-full">Join the queue</Button>
               </Link>
               <Link to="/queue/history" className="flex-1">
-                <Button variant="secondary" className="w-full">
+                <Button variant="secondary" className="w-full border border-slate-300 bg-slate-50 hover:border-brand-400 hover:bg-white">
                   Explore best times
                 </Button>
               </Link>

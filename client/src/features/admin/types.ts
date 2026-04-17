@@ -1,5 +1,7 @@
 import type { QueueEntryView } from '../public/types';
 
+export type AdminAnalyticsRange = 'today' | 'week' | 'last14days';
+
 export type AdminSession = {
   token: string;
   admin: {
@@ -51,6 +53,12 @@ export type AdminSettingsData = {
   timezone: string;
   phone: string | null;
   address: string | null;
+  admins: Array<{
+    id: string;
+    username: string;
+    displayName: string;
+    role: string;
+  }>;
   serviceTypes: Array<{
     id: string;
     name: string;

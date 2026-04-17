@@ -145,15 +145,24 @@ function ServiceTypeSelector({
               onClick={() => onSelect(serviceType.id)}
               className={`rounded-3xl border px-4 py-4 text-left transition ${
                 isSelected
-                  ? 'border-brand-300 bg-brand-50 shadow-soft'
-                  : 'border-slate-200/80 bg-white/70 hover:-translate-y-0.5 hover:bg-white'
+                  ? 'border-2 border-brand-500 bg-brand-50 shadow-soft ring-2 ring-brand-500/15'
+                  : 'border-slate-200/80 bg-white/70 hover:-translate-y-0.5 hover:border-brand-200 hover:bg-white'
               }`}
+              aria-pressed={isSelected}
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="rounded-2xl bg-slate-900 p-2.5 text-white">
+                <div
+                  className={`rounded-2xl p-2.5 text-white transition ${
+                    isSelected ? 'bg-brand-600 shadow-md' : 'bg-slate-900'
+                  }`}
+                >
                   {serviceType.durationMinutes > 30 ? <Sparkles size={16} /> : <Scissors size={16} />}
                 </div>
-                <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                <div
+                  className={`rounded-full px-3 py-1 text-xs font-semibold transition ${
+                    isSelected ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-700'
+                  }`}
+                >
                   {serviceType.durationMinutes} min
                 </div>
               </div>

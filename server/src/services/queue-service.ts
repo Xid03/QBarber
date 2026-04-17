@@ -2,6 +2,7 @@ import type { Prisma, QueueEntry } from '@prisma/client';
 
 import { prisma } from '../config/prisma.js';
 import { AppError } from '../lib/app-error.js';
+import { emitQueueEvents } from '../socket/queue-events.js';
 
 import { shopService } from './shop-service.js';
 import { waitTimeEstimationService } from './wait-time-estimation-service.js';
@@ -12,6 +13,8 @@ type AddToQueueInput = {
   serviceTypeId: string;
   barberId?: string;
 };
+
+type AnalyticsRange = 'today' | 'week' | 'last14days';
 
 const activeStatuses: Array<QueueEntry['status']> = ['WAITING', 'IN_PROGRESS'];
 
@@ -95,7 +98,18 @@ export class QueueService {
 
     await this.updateQueuePosition(shopId);
 
-    return this.getEntryStatus(shopId, entry.id);
+    const [entryStatus, queueStatus] = await Promise.all([
+      this.getEntryStatus(shopId, entry.id),
+      this.getQueueStatus(shopId)
+    ]);
+
+    emitQueueEvents({
+      shopId,
+      queueStatus,
+      lastAction: 'joined'
+    });
+
+    return entryStatus;
   }
 
   async removeFromQueue(entryId: string, reason: string) {
@@ -115,7 +129,15 @@ export class QueueService {
 
     await this.updateQueuePosition(entry.shopId);
 
-    return this.getQueueStatus(entry.shopId);
+    const queueStatus = await this.getQueueStatus(entry.shopId);
+
+    emitQueueEvents({
+      shopId: entry.shopId,
+      queueStatus,
+      lastAction: 'left'
+    });
+
+    return queueStatus;
   }
 
   async updateQueuePosition(shopId: string, tx: Prisma.TransactionClient = prisma) {
@@ -310,7 +332,18 @@ export class QueueService {
 
     await this.updateQueuePosition(entry.shopId);
 
-    return this.getEntryStatus(entry.shopId, entryId);
+    const [entryStatus, queueStatus] = await Promise.all([
+      this.getEntryStatus(entry.shopId, entryId),
+      this.getQueueStatus(entry.shopId)
+    ]);
+
+    emitQueueEvents({
+      shopId: entry.shopId,
+      queueStatus,
+      lastAction: 'started'
+    });
+
+    return entryStatus;
   }
 
   async markAsCompleted(entryId: string) {
@@ -333,7 +366,15 @@ export class QueueService {
 
     await this.updateQueuePosition(entry.shopId);
 
-    return this.getQueueStatus(entry.shopId);
+    const queueStatus = await this.getQueueStatus(entry.shopId);
+
+    emitQueueEvents({
+      shopId: entry.shopId,
+      queueStatus,
+      lastAction: 'completed'
+    });
+
+    return queueStatus;
   }
 
   async cancelEntry(entryId: string, reason: string) {
@@ -396,11 +437,10 @@ export class QueueService {
     };
   }
 
-  async getDetailedAnalytics(shopId: string) {
+  async getDetailedAnalytics(shopId: string, range: AnalyticsRange = 'last14days') {
     await shopService.ensureShopExists(shopId);
 
-    const since = new Date();
-    since.setDate(since.getDate() - 14);
+    const since = this.getAnalyticsRangeStart(range);
 
     const entries = await prisma.queueEntry.findMany({
       where: {
@@ -497,6 +537,28 @@ export class QueueService {
     }
 
     return 'LOW';
+  }
+
+  private getAnalyticsRangeStart(range: AnalyticsRange) {
+    const now = new Date();
+
+    if (range === 'today') {
+      return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    }
+
+    if (range === 'week') {
+      const currentDay = now.getDay();
+      const diffToMonday = currentDay === 0 ? 6 : currentDay - 1;
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - diffToMonday);
+      weekStart.setHours(0, 0, 0, 0);
+      return weekStart;
+    }
+
+    const last14DaysStart = new Date(now);
+    last14DaysStart.setDate(now.getDate() - 13);
+    last14DaysStart.setHours(0, 0, 0, 0);
+    return last14DaysStart;
   }
 }
 

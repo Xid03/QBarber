@@ -13,29 +13,37 @@ import {
 import { AdminLayout } from '../../components/layout/AdminLayout';
 import { ErrorStateCard, QueueLoadingCard } from '../../components/public/QueueComponents';
 import { useAdminAuth } from '../../features/admin/auth-context';
-import { getAdminApiErrorMessage, useAdminDashboard, useSettings } from '../../features/admin/hooks';
+import { getAdminApiErrorMessage, useAdminDashboard, useAnalyticsData, useSettings } from '../../features/admin/hooks';
+import { useRealtimeShopSync } from '../../features/realtime/hooks';
 
 export function DashboardPage() {
   const { session } = useAdminAuth();
   const navigate = useNavigate();
+  const { connectionState } = useRealtimeShopSync({
+    shopId: session?.shop.id,
+    audience: 'admin'
+  });
   const dashboardQuery = useAdminDashboard(session?.shop.id, session?.token);
+  const analyticsQuery = useAnalyticsData(session?.shop.id, session?.token);
   const { settingsQuery, updateStatusMutation } = useSettings(session?.shop.id, session?.token);
 
   if (!session) {
     return null;
   }
 
-  const content = dashboardQuery.isLoading || settingsQuery.isLoading || !dashboardQuery.data || !settingsQuery.data ? (
+  const content =
+    dashboardQuery.isLoading || settingsQuery.isLoading || analyticsQuery.isLoading || !dashboardQuery.data || !settingsQuery.data ? (
     <div className="grid gap-4">
       <QueueLoadingCard label="Dashboard" />
     </div>
-  ) : dashboardQuery.isError || settingsQuery.isError ? (
+  ) : dashboardQuery.isError || settingsQuery.isError || analyticsQuery.isError ? (
     <ErrorStateCard
       title="Dashboard data could not be loaded."
-      message={getAdminApiErrorMessage(dashboardQuery.error ?? settingsQuery.error)}
+      message={getAdminApiErrorMessage(dashboardQuery.error ?? settingsQuery.error ?? analyticsQuery.error)}
       onRetry={() => {
         void dashboardQuery.refetch();
         void settingsQuery.refetch();
+        void analyticsQuery.refetch();
       }}
     />
   ) : (
@@ -73,7 +81,7 @@ export function DashboardPage() {
           onManualAdd={() => navigate('/admin/queue')}
         />
         <div className="grid gap-5">
-          <ShowcaseTrafficCard data={dashboardQuery.data} />
+          <ShowcaseTrafficCard analytics={analyticsQuery.data} busyLevel={dashboardQuery.data.busyLevel} />
           <ShowcaseQuickActions
             isShopOpen={settingsQuery.data.status === 'OPEN'}
             onManualAdd={() => navigate('/admin/queue')}
@@ -85,7 +93,7 @@ export function DashboardPage() {
             }}
             isUpdatingStatus={updateStatusMutation.isPending}
           />
-          <ShowcaseRecentActivity data={dashboardQuery.data} />
+          <ShowcaseRecentActivity data={dashboardQuery.data} analytics={analyticsQuery.data} />
         </div>
       </div>
     </>
@@ -105,6 +113,7 @@ export function DashboardPage() {
       <AdminLayout
         title={`${greeting}, ${session.admin.displayName}!`}
         description={displayDate}
+        connectionState={connectionState}
       >
         {content}
       </AdminLayout>

@@ -1,22 +1,207 @@
+import { zodResolver } from '@hookform/resolvers/zod';
+import { AlertTriangle, Eye, EyeOff, Pencil, Save, ShieldPlus, Trash2, UserX, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+
 import { formatCurrency, formatOperatingHour } from '../../features/public/formatters';
 import type { AdminSettingsData } from '../../features/admin/types';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
+import { Input } from '../ui/Input';
 import { StatusBadge } from '../ui/StatusBadge';
 
-export function OperatingHoursEditor({ settings }: { settings: AdminSettingsData }) {
+const createAdminFormSchema = z.object({
+  displayName: z.string().trim().min(2, 'Display name is required.'),
+  username: z.string().trim().min(3, 'Username is required.'),
+  password: z.string().min(6, 'Password must be at least 6 characters.')
+});
+
+type CreateAdminFormValues = z.infer<typeof createAdminFormSchema>;
+type OperatingHourFormValue = AdminSettingsData['operatingHours'][number];
+const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+export function OperatingHoursEditor({
+  settings,
+  onToggleStatus,
+  onSaveOperatingHours,
+  isUpdating,
+  isSaving,
+  errorMessage
+}: {
+  settings: AdminSettingsData;
+  onToggleStatus: () => void;
+  onSaveOperatingHours: (values: { operatingHours: OperatingHourFormValue[] }) => Promise<void> | void;
+  isUpdating?: boolean;
+  isSaving?: boolean;
+  errorMessage?: string;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftHours, setDraftHours] = useState<OperatingHourFormValue[]>(settings.operatingHours);
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraftHours(settings.operatingHours);
+  }, [settings.operatingHours]);
+
+  const hasChanges = useMemo(
+    () => JSON.stringify(draftHours) !== JSON.stringify(settings.operatingHours),
+    [draftHours, settings.operatingHours]
+  );
+
   return (
-    <Card className="space-y-4">
+    <Card className="admin-panel space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="section-label">Operating hours</p>
-          <p className="mt-2 text-lg font-semibold">Current storefront schedule.</p>
+          <p className="mt-2 text-lg font-semibold text-slate-900">Current storefront schedule.</p>
         </div>
-        <StatusBadge label={settings.status === 'OPEN' ? 'Open' : 'Closed'} tone={settings.status === 'OPEN' ? 'success' : 'danger'} />
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <StatusBadge label={settings.status === 'OPEN' ? 'Open' : 'Closed'} tone={settings.status === 'OPEN' ? 'success' : 'danger'} />
+          <Button
+            variant="secondary"
+            className="inline-flex items-center gap-2 border-slate-300 bg-white px-4 py-2.5 text-slate-800 shadow-sm hover:border-brand-400 hover:bg-white"
+            onClick={onToggleStatus}
+            disabled={isUpdating}
+          >
+            {isUpdating
+              ? 'Updating...'
+              : settings.status === 'OPEN'
+                ? 'Mark shop closed'
+                : 'Mark shop open'}
+          </Button>
+        </div>
       </div>
-      <div className="grid gap-2 text-sm text-muted">
-        {settings.operatingHours.map((item) => (
-          <div key={item.id}>{formatOperatingHour(item.dayOfWeek, item.opensAt, item.closesAt, item.isEnabled)}</div>
+
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/70 px-4 py-3">
+        <div>
+          <p className="text-sm font-medium text-slate-800">Weekly schedule</p>
+          <p className="mt-1 text-sm text-muted">
+            {isEditing ? 'Adjust opening times and close any off days, then save.' : 'Review the hours customers see across the week.'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {isEditing ? (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                className="px-3 py-2"
+                onClick={() => {
+                  setDraftHours(settings.operatingHours);
+                  setLocalError(null);
+                  setIsEditing(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                className="inline-flex items-center gap-2 px-3 py-2"
+                disabled={isSaving || !hasChanges}
+                onClick={() => {
+                  const invalidEntry = draftHours.find((entry) => entry.isEnabled && entry.opensAt >= entry.closesAt);
+
+                  if (invalidEntry) {
+                    setLocalError(`Closing time must be after opening time for ${dayLabels[invalidEntry.dayOfWeek]}.`);
+                    return;
+                  }
+
+                  setLocalError(null);
+                  void (async () => {
+                    try {
+                      await onSaveOperatingHours({ operatingHours: draftHours });
+                      setIsEditing(false);
+                    } catch {
+                      return;
+                    }
+                  })();
+                }}
+              >
+                <Save size={16} />
+                {isSaving ? 'Saving...' : 'Save hours'}
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              className="inline-flex items-center gap-2 border-slate-300 bg-white px-3 py-2 text-slate-800 shadow-sm hover:border-brand-400 hover:bg-white"
+              onClick={() => {
+                setDraftHours(settings.operatingHours);
+                setLocalError(null);
+                setIsEditing(true);
+              }}
+            >
+              <Pencil size={16} />
+              Edit hours
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {(localError || errorMessage) ? (
+        <div className="rounded-2xl border border-danger-100 bg-danger-100/60 px-4 py-3 text-sm text-danger-600">
+          {localError ?? errorMessage}
+        </div>
+      ) : null}
+
+      <div className="grid gap-3">
+        {(isEditing ? draftHours : settings.operatingHours).map((item) => (
+          <div key={item.id} className="admin-soft-surface rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-4">
+            {isEditing ? (
+              <div className="grid gap-3 md:grid-cols-[88px,120px,1fr,1fr] md:items-center">
+                <p className="font-semibold text-slate-900">{dayLabels[item.dayOfWeek]}</p>
+                <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500"
+                    checked={item.isEnabled}
+                    onChange={(event) => {
+                      const isEnabled = event.target.checked;
+                      setDraftHours((current) =>
+                        current.map((entry) => (entry.id === item.id ? { ...entry, isEnabled } : entry))
+                      );
+                    }}
+                  />
+                  Open
+                </label>
+                <label className="grid gap-1 text-sm">
+                  <span className="font-medium text-slate-700">Opens</span>
+                  <Input
+                    type="time"
+                    value={item.opensAt}
+                    disabled={!item.isEnabled || isSaving}
+                    onChange={(event) => {
+                      const opensAt = event.target.value;
+                      setDraftHours((current) =>
+                        current.map((entry) => (entry.id === item.id ? { ...entry, opensAt } : entry))
+                      );
+                    }}
+                  />
+                </label>
+                <label className="grid gap-1 text-sm">
+                  <span className="font-medium text-slate-700">Closes</span>
+                  <Input
+                    type="time"
+                    value={item.closesAt}
+                    disabled={!item.isEnabled || isSaving}
+                    onChange={(event) => {
+                      const closesAt = event.target.value;
+                      setDraftHours((current) =>
+                        current.map((entry) => (entry.id === item.id ? { ...entry, closesAt } : entry))
+                      );
+                    }}
+                  />
+                </label>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-muted">{formatOperatingHour(item.dayOfWeek, item.opensAt, item.closesAt, item.isEnabled)}</p>
+                <StatusBadge label={item.isEnabled ? 'Open day' : 'Closed day'} tone={item.isEnabled ? 'success' : 'warning'} />
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </Card>
@@ -25,14 +210,14 @@ export function OperatingHoursEditor({ settings }: { settings: AdminSettingsData
 
 export function ServiceTypeManager({ settings }: { settings: AdminSettingsData }) {
   return (
-    <Card className="space-y-4">
+    <Card className="admin-panel space-y-4">
       <div>
         <p className="section-label">Service menu</p>
-        <p className="mt-2 text-lg font-semibold">Available queue services right now.</p>
+        <p className="mt-2 text-lg font-semibold text-slate-900">Available queue services right now.</p>
       </div>
       <div className="grid gap-3">
         {settings.serviceTypes.map((serviceType) => (
-          <div key={serviceType.id} className="rounded-2xl border border-slate-200/80 bg-white/60 px-4 py-4">
+          <div key={serviceType.id} className="admin-soft-surface rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-4">
             <div className="flex items-center justify-between gap-3">
               <p className="font-semibold text-slate-900">{serviceType.name}</p>
               <StatusBadge label={serviceType.isActive ? 'Active' : 'Paused'} tone={serviceType.isActive ? 'success' : 'warning'} />
@@ -47,41 +232,237 @@ export function ServiceTypeManager({ settings }: { settings: AdminSettingsData }
   );
 }
 
-export function BarberManager({
+export function AdminAccessManager({
   settings,
-  onToggleStatus,
-  isUpdating
+  onCreateAdmin,
+  onToggleAdminStatus,
+  onDeleteAdmin,
+  isCreating,
+  isUpdatingAdmin,
+  isDeletingAdmin,
+  errorMessage
 }: {
   settings: AdminSettingsData;
-  onToggleStatus: () => void;
-  isUpdating?: boolean;
+  onCreateAdmin: (values: CreateAdminFormValues) => Promise<void> | void;
+  onToggleAdminStatus: (adminUserId: string, isActive: boolean) => Promise<void> | void;
+  onDeleteAdmin: (adminUserId: string) => Promise<void> | void;
+  isCreating?: boolean;
+  isUpdatingAdmin?: boolean;
+  isDeletingAdmin?: boolean;
+  errorMessage?: string;
 }) {
+  const [showPassword, setShowPassword] = useState(false);
+  const [pendingDeleteAdminId, setPendingDeleteAdminId] = useState<string | null>(null);
+  const form = useForm<CreateAdminFormValues>({
+    resolver: zodResolver(createAdminFormSchema),
+    defaultValues: {
+      displayName: '',
+      username: '',
+      password: ''
+    }
+  });
+
   return (
-    <Card className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="section-label">Shop controls</p>
-          <p className="mt-2 text-lg font-semibold">Team roster and storefront switch.</p>
-        </div>
-        <Button variant="secondary" onClick={onToggleStatus} disabled={isUpdating}>
-          {isUpdating
-            ? 'Updating...'
-            : settings.status === 'OPEN'
-              ? 'Mark shop closed'
-              : 'Mark shop open'}
-        </Button>
+    <Card className="admin-panel space-y-5">
+      <div>
+        <p className="section-label">Admin access</p>
+        <p className="mt-2 text-lg font-semibold text-slate-900">Register a new admin for this barbershop.</p>
       </div>
+
       <div className="grid gap-3">
-        {settings.barbers.map((barber) => (
-          <div key={barber.id} className="rounded-2xl border border-slate-200/80 bg-white/60 px-4 py-4">
+        {settings.admins.map((admin) => {
+          const isPendingDelete = pendingDeleteAdminId === admin.id;
+
+          return (
+          <div key={admin.id} className="admin-soft-surface rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="font-semibold text-slate-900">{barber.name}</p>
-              <StatusBadge label={barber.isActive ? 'Active' : 'Offline'} tone={barber.isActive ? 'success' : 'warning'} />
+              <div>
+                <p className="font-semibold text-slate-900">{admin.displayName}</p>
+                <p className="mt-1 text-sm text-muted">@{admin.username}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <StatusBadge label={admin.role === 'INACTIVE' ? 'Inactive' : admin.role} tone={admin.role === 'INACTIVE' ? 'warning' : 'info'} />
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-warning-300 hover:bg-warning-50 hover:text-warning-600"
+                  aria-label={admin.role === 'INACTIVE' ? 'Reactivate admin' : 'Deactivate admin'}
+                  title={admin.role === 'INACTIVE' ? 'Reactivate admin' : 'Deactivate admin'}
+                  disabled={isUpdatingAdmin || isDeletingAdmin}
+                  onClick={() => {
+                    void onToggleAdminStatus(admin.id, admin.role === 'INACTIVE');
+                  }}
+                >
+                  <UserX size={16} />
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:border-danger-500 hover:bg-danger-50 hover:text-danger-600"
+                  aria-label="Delete admin"
+                  title="Delete admin"
+                  disabled={isUpdatingAdmin || isDeletingAdmin}
+                  onClick={() => {
+                    setPendingDeleteAdminId((current) => (current === admin.id ? null : admin.id));
+                  }}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             </div>
-            <p className="mt-2 text-sm text-muted">Barber profile is available for queue assignment in later phases.</p>
+            {isPendingDelete ? (
+              <div className="admin-danger-panel mt-4 space-y-4 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-danger-100 text-danger-600">
+                    <AlertTriangle size={18} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-base font-semibold text-slate-900">Delete this admin account?</p>
+                        <p className="mt-1 text-sm text-slate-700">
+                          <span className="font-medium text-slate-900">{admin.displayName}</span> will lose access to
+                          the admin dashboard immediately, and this action cannot be undone.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-danger-100 bg-white/80 text-danger-500 transition hover:border-danger-500 hover:bg-danger-100 hover:text-danger-600"
+                        aria-label="Close delete confirmation"
+                        onClick={() => {
+                          setPendingDeleteAdminId(null);
+                        }}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm">
+                        @{admin.username}
+                      </span>
+                      <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-semibold text-slate-700 shadow-sm">
+                        Role: {admin.role === 'INACTIVE' ? 'Inactive' : admin.role}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-danger-100 bg-white/70 px-4 py-3 text-sm text-slate-700">
+                  This is best for removing old staff accounts permanently. If you may need this person later, use
+                  deactivate instead.
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="sm:w-auto"
+                    onClick={() => {
+                      setPendingDeleteAdminId(null);
+                    }}
+                  >
+                    Keep admin
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="danger"
+                    className="sm:w-auto"
+                    disabled={isDeletingAdmin}
+                    onClick={() => {
+                      void (async () => {
+                        try {
+                          await onDeleteAdmin(admin.id);
+                          setPendingDeleteAdminId(null);
+                        } catch {
+                          return;
+                        }
+                      })();
+                    }}
+                  >
+                    {isDeletingAdmin ? 'Deleting admin...' : 'Delete admin'}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </div>
-        ))}
+          );
+        })}
       </div>
+
+      <form
+        className="grid gap-4 rounded-2xl border border-dashed border-slate-300 px-4 py-4"
+        onSubmit={(event) => {
+          void form.handleSubmit(async (values) => {
+            try {
+              await onCreateAdmin(values);
+              form.reset({
+                displayName: '',
+                username: '',
+                password: ''
+              });
+            } catch {
+              return;
+            }
+          })(event);
+        }}
+      >
+        <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          <ShieldPlus size={16} />
+          <span>Create admin account</span>
+        </div>
+
+        <label className="grid gap-2">
+          <span className="text-sm font-medium text-slate-700">Display name</span>
+          <Input placeholder="New admin name" {...form.register('displayName')} />
+          <FieldError message={form.formState.errors.displayName?.message} />
+        </label>
+
+        <label className="grid gap-2">
+          <span className="text-sm font-medium text-slate-700">Username</span>
+          <Input placeholder="newadmin" {...form.register('username')} />
+          <FieldError message={form.formState.errors.username?.message} />
+        </label>
+
+        <label className="grid gap-2">
+          <span className="text-sm font-medium text-slate-700">Password</span>
+          <div className="relative">
+            <Input
+              type={showPassword ? 'text' : 'password'}
+              placeholder="At least 6 characters"
+              className="pr-12"
+              {...form.register('password')}
+            />
+            <button
+              type="button"
+              className="absolute inset-y-0 right-3 inline-flex items-center text-slate-500 transition hover:text-slate-700"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              onClick={() => {
+                setShowPassword((current) => !current);
+              }}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+          <FieldError message={form.formState.errors.password?.message} />
+        </label>
+
+        {errorMessage ? (
+          <div className="rounded-2xl border border-danger-100 bg-danger-100/60 px-4 py-3 text-sm text-danger-600">
+            {errorMessage}
+          </div>
+        ) : null}
+
+        <Button type="submit" className="w-full sm:w-auto" disabled={isCreating}>
+          {isCreating ? 'Creating admin...' : 'Register new admin'}
+        </Button>
+      </form>
     </Card>
   );
+}
+
+function FieldError({ message }: { message?: string }) {
+  if (!message) {
+    return null;
+  }
+
+  return <p className="text-sm text-danger-600">{message}</p>;
 }

@@ -13,7 +13,11 @@ export function StatusBadge({ label, tone = 'info', className = '' }: StatusBadg
   };
 
   return (
-    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${tones[tone]} ${className}`}>
+    <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold ${tones[tone]} ${className}`}>
+      <span
+        className={`h-2 w-2 rounded-full ${tone === 'info' ? 'live-dot bg-brand-500' : tone === 'success' ? 'bg-success-500' : tone === 'warning' ? 'bg-warning-500' : 'bg-danger-500'}`}
+        aria-hidden="true"
+      />
       {label}
     </span>
   );

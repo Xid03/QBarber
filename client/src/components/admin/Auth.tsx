@@ -1,12 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useState, type ReactNode } from 'react';
-import { LockKeyhole, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, LockKeyhole, LogOut } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 
+import { Logo } from '../Logo';
 import { useAdminAuth } from '../../features/admin/auth-context';
 import { getAdminApiErrorMessage, loginAdmin } from '../../features/admin/hooks';
+import { useToast } from '../../features/feedback/toast-provider';
 import { Button } from '../ui/Button';
 import { Card } from '../ui/Card';
 import { Input } from '../ui/Input';
@@ -22,22 +24,24 @@ export function LoginForm() {
   const navigate = useNavigate();
   const location = useLocation();
   const { setSession } = useAdminAuth();
+  const { showToast } = useToast();
   const form = useForm<AdminLoginValues>({
     resolver: zodResolver(adminLoginSchema),
     defaultValues: {
-      username: 'admin',
-      password: 'password'
+      username: '',
+      password: ''
     }
   });
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   const nextPath = (location.state as { from?: string } | null)?.from || '/admin/dashboard';
 
   return (
     <Card className="mx-auto max-w-xl space-y-6">
       <div className="flex items-start gap-4">
-        <div className="rounded-3xl bg-slate-900 p-3 text-white">
-          <ShieldCheck size={22} />
+        <div className="shrink-0 shadow-soft">
+          <Logo size={52} />
         </div>
         <div>
           <p className="section-label">Admin sign in</p>
@@ -56,6 +60,10 @@ export function LoginForm() {
               setErrorMessage(null);
               const session = await loginAdmin(values);
               setSession(session);
+              showToast({
+                title: 'Signed in successfully',
+                message: `Welcome back to ${session.shop.name}.`
+              });
               navigate(nextPath, { replace: true });
             } catch (error) {
               setErrorMessage(getAdminApiErrorMessage(error));
@@ -71,7 +79,25 @@ export function LoginForm() {
 
         <label className="grid gap-2">
           <span className="text-sm font-medium text-slate-700">Password</span>
-          <Input placeholder="password" type="password" {...form.register('password')} />
+          <div className="relative">
+            <Input
+              placeholder="Enter your password"
+              type={showPassword ? 'text' : 'password'}
+              autoComplete="current-password"
+              className="pr-12"
+              {...form.register('password')}
+            />
+            <button
+              type="button"
+              className="absolute inset-y-0 right-3 inline-flex items-center text-slate-500 transition hover:text-slate-700"
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+              onClick={() => {
+                setShowPassword((current) => !current);
+              }}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
           <FieldError message={form.formState.errors.password?.message} />
         </label>
 
@@ -108,11 +134,14 @@ export function LogoutButton() {
   return (
     <Button
       variant="secondary"
+      className="admin-logout-button inline-flex items-center gap-2 rounded-xl border-slate-200 bg-slate-50/90 px-3.5 py-2.5 text-slate-700 shadow-sm hover:bg-white hover:shadow-md"
+      aria-label="Sign out of the admin dashboard"
       onClick={() => {
         logout();
         navigate('/admin/login', { replace: true });
       }}
     >
+      <LogOut size={16} />
       Sign out
     </Button>
   );

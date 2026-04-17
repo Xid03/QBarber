@@ -18,7 +18,7 @@ export function QueueItem({
 }) {
   return (
     <div
-      className={`rounded-2xl border px-4 py-4 transition ${
+      className={`card-interactive rounded-2xl border px-4 py-4 transition ${
         highlight ? 'border-brand-200 bg-brand-50/80' : 'border-slate-200/80 bg-white/70'
       } ${compact ? 'text-sm' : ''}`}
     >
@@ -64,8 +64,8 @@ export function QueueList({
       <Card className="space-y-3">
         <p className="section-label">{title}</p>
         <div className="rounded-3xl border border-dashed border-brand-200 bg-brand-50/60 px-5 py-8 text-center">
-          <p className="text-lg font-semibold">No one is waiting right now.</p>
-          <p className="mt-2 text-sm text-muted">Perfect timing if you want the quickest possible walk-in.</p>
+          <p className="text-lg font-semibold">No wait at all. Perfect timing.</p>
+          <p className="mt-2 text-sm text-muted">This is one of those rare walk-straight-in moments, so now is a great time to visit.</p>
         </div>
       </Card>
     );
@@ -101,7 +101,10 @@ export function PositionTracker({
         : `${peopleAheadCount} ${peopleAheadCount === 1 ? 'person' : 'people'} ahead`;
 
   return (
-    <Card className="space-y-5">
+    <Card className={`space-y-5 ${peopleAheadCount === 0 && entry.status !== 'IN_PROGRESS' ? 'border border-success-100 bg-success-100/40' : ''}`}>
+      <div aria-live="polite" className="announce-only">
+        Queue tracker updated. Current position {entry.position}. {headline}.
+      </div>
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="section-label">Your live position</p>
@@ -128,7 +131,7 @@ export function PeopleAheadList({ entries }: { entries: QueueEntryView[] }) {
       <Card className="space-y-3">
         <p className="section-label">People ahead</p>
         <div className="rounded-2xl bg-success-100 px-4 py-5 text-sm text-success-600">
-          You are next in line once the current service wraps up.
+          You are next in line once the current service wraps up. Keep this tab open and QFlow will nudge the tracker forward automatically.
         </div>
       </Card>
     );
@@ -166,14 +169,14 @@ export function LeaveQueueButton({
 
 export function QueueLoadingCard({ label }: { label: string }) {
   return (
-    <Card className="space-y-3">
+    <Card className="space-y-3" role="status" aria-live="polite" aria-label={`${label} loading`}>
       <p className="section-label">{label}</p>
       <div className="grid gap-3">
         {[0, 1, 2].map((item) => (
-          <div key={item} className="animate-pulse rounded-2xl border border-slate-200/70 bg-white/70 px-4 py-4">
-            <div className="h-3 w-24 rounded-full bg-slate-200" />
-            <div className="mt-3 h-5 w-40 rounded-full bg-slate-200" />
-            <div className="mt-3 h-3 w-full rounded-full bg-slate-100" />
+          <div key={item} className="rounded-2xl border border-slate-200/70 bg-white/70 px-4 py-4">
+            <div className="skeleton-shimmer h-3 w-24 rounded-full" />
+            <div className="skeleton-shimmer mt-3 h-5 w-40 rounded-full" />
+            <div className="skeleton-shimmer mt-3 h-3 w-full rounded-full" />
           </div>
         ))}
       </div>
@@ -191,7 +194,7 @@ export function ErrorStateCard({
   onRetry?: () => void;
 }) {
   return (
-    <Card className="space-y-4 border border-danger-100">
+    <Card className="space-y-4 border border-danger-100" role="alert">
       <div className="flex items-center gap-3">
         <div className="rounded-2xl bg-danger-100 p-3 text-danger-600">
           <CircleOff size={20} />
@@ -204,7 +207,7 @@ export function ErrorStateCard({
       <p className="text-sm text-muted">{message}</p>
       {onRetry ? (
         <Button variant="secondary" onClick={onRetry} className="w-full sm:w-auto">
-          Try again
+          Try again now
         </Button>
       ) : null}
     </Card>

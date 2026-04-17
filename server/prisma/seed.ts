@@ -15,8 +15,8 @@ async function main() {
 
   const shop = await prisma.shop.create({
     data: {
-      name: "Tony's Barbershop",
-      slug: 'tonys-barbershop',
+      name: 'YZH Barber',
+      slug: 'yzh-barber',
       status: 'OPEN',
       phone: '+60 12-555 0199',
       address: '88 Jalan Bukit Bintang, Kuala Lumpur',

@@ -9,6 +9,11 @@ export class ShopService {
     const shop = await prisma.shop.findUnique({
       where: { id: shopId },
       include: {
+        adminUsers: {
+          orderBy: {
+            createdAt: 'asc'
+          }
+        },
         operatingHours: {
           orderBy: {
             dayOfWeek: 'asc'
@@ -58,6 +63,55 @@ export class ShopService {
         dayOfWeek: 'asc'
       }
     });
+  }
+
+  async updateOperatingHours(
+    shopId: string,
+    operatingHours: Array<{
+      id: string;
+      dayOfWeek: number;
+      opensAt: string;
+      closesAt: string;
+      isEnabled: boolean;
+    }>
+  ) {
+    await this.ensureShopExists(shopId);
+
+    const existingHours = await prisma.operatingHour.findMany({
+      where: { shopId },
+      select: {
+        id: true,
+        dayOfWeek: true
+      }
+    });
+
+    const existingIds = new Set(existingHours.map((entry) => entry.id));
+
+    for (const entry of operatingHours) {
+      if (!existingIds.has(entry.id)) {
+        throw new AppError(404, 'OPERATING_HOUR_NOT_FOUND', 'One or more operating hour entries could not be found.');
+      }
+    }
+
+    const uniqueDays = new Set(operatingHours.map((entry) => entry.dayOfWeek));
+    if (uniqueDays.size !== operatingHours.length) {
+      throw new AppError(400, 'DUPLICATE_DAY', 'Each weekday can only be configured once.');
+    }
+
+    await prisma.$transaction(
+      operatingHours.map((entry) =>
+        prisma.operatingHour.update({
+          where: { id: entry.id },
+          data: {
+            opensAt: entry.opensAt,
+            closesAt: entry.closesAt,
+            isEnabled: entry.isEnabled
+          }
+        })
+      )
+    );
+
+    return this.getOperatingHours(shopId);
   }
 
   async checkIfShopIsOpen(shopOrId: string | Shop) {

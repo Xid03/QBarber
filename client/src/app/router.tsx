@@ -1,24 +1,53 @@
+import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 
-import { AdminLoginPage } from '../pages/admin/AdminLoginPage';
-import { AnalyticsPage } from '../pages/admin/AnalyticsPage';
-import { DashboardPage } from '../pages/admin/DashboardPage';
-import { QueueManagementPage } from '../pages/admin/QueueManagementPage';
-import { SettingsPage } from '../pages/admin/SettingsPage';
-import { HistoricalWaitTimesPage } from '../pages/public/HistoricalWaitTimesPage';
-import { JoinQueuePage } from '../pages/public/JoinQueuePage';
-import { MyPositionPage } from '../pages/public/MyPositionPage';
-import { QueueStatusPage } from '../pages/public/QueueStatusPage';
+import { RouteLoadingScreen } from '../components/ui/RouteLoadingScreen';
+
+const QueueStatusPage = lazy(async () =>
+  import('../pages/public/QueueStatusPage').then((module) => ({ default: module.QueueStatusPage }))
+);
+const JoinQueuePage = lazy(async () =>
+  import('../pages/public/JoinQueuePage').then((module) => ({ default: module.JoinQueuePage }))
+);
+const MyPositionPage = lazy(async () =>
+  import('../pages/public/MyPositionPage').then((module) => ({ default: module.MyPositionPage }))
+);
+const HistoricalWaitTimesPage = lazy(async () =>
+  import('../pages/public/HistoricalWaitTimesPage').then((module) => ({
+    default: module.HistoricalWaitTimesPage
+  }))
+);
+const AdminLoginPage = lazy(async () =>
+  import('../pages/admin/AdminLoginPage').then((module) => ({ default: module.AdminLoginPage }))
+);
+const DashboardPage = lazy(async () =>
+  import('../pages/admin/DashboardPage').then((module) => ({ default: module.DashboardPage }))
+);
+const QueueManagementPage = lazy(async () =>
+  import('../pages/admin/QueueManagementPage').then((module) => ({
+    default: module.QueueManagementPage
+  }))
+);
+const AnalyticsPage = lazy(async () =>
+  import('../pages/admin/AnalyticsPage').then((module) => ({ default: module.AnalyticsPage }))
+);
+const SettingsPage = lazy(async () =>
+  import('../pages/admin/SettingsPage').then((module) => ({ default: module.SettingsPage }))
+);
+
+function withSuspense(element: ReactNode) {
+  return <Suspense fallback={<RouteLoadingScreen />}>{element}</Suspense>;
+}
 
 export const router = createBrowserRouter([
-  { path: '/', element: <QueueStatusPage /> },
-  { path: '/queue', element: <QueueStatusPage /> },
-  { path: '/queue/join', element: <JoinQueuePage /> },
-  { path: '/my-position/:entryId', element: <MyPositionPage /> },
-  { path: '/queue/history', element: <HistoricalWaitTimesPage /> },
-  { path: '/admin/login', element: <AdminLoginPage /> },
-  { path: '/admin/dashboard', element: <DashboardPage /> },
-  { path: '/admin/queue', element: <QueueManagementPage /> },
-  { path: '/admin/analytics', element: <AnalyticsPage /> },
-  { path: '/admin/settings', element: <SettingsPage /> }
+  { path: '/', element: withSuspense(<QueueStatusPage />) },
+  { path: '/queue', element: withSuspense(<QueueStatusPage />) },
+  { path: '/queue/join', element: withSuspense(<JoinQueuePage />) },
+  { path: '/my-position/:entryId', element: withSuspense(<MyPositionPage />) },
+  { path: '/queue/history', element: withSuspense(<HistoricalWaitTimesPage />) },
+  { path: '/admin/login', element: withSuspense(<AdminLoginPage />) },
+  { path: '/admin/dashboard', element: withSuspense(<DashboardPage />) },
+  { path: '/admin/queue', element: withSuspense(<QueueManagementPage />) },
+  { path: '/admin/analytics', element: withSuspense(<AnalyticsPage />) },
+  { path: '/admin/settings', element: withSuspense(<SettingsPage />) }
 ]);

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AxiosError } from 'axios';
 
 import { apiClient } from '../../api/client';
+import { useLiveRefetchInterval } from '../realtime/hooks';
 import type {
   EntryStatusData,
   PublicAnalyticsData,
@@ -77,29 +78,35 @@ export function usePublicShop() {
 }
 
 export function useQueueStatus(shopId?: string) {
+  const refetchInterval = useLiveRefetchInterval(30_000);
+
   return useQuery({
     queryKey: ['queue-status', shopId],
     queryFn: () => getQueueStatus(shopId as string),
     enabled: Boolean(shopId),
-    refetchInterval: 30_000
+    refetchInterval
   });
 }
 
 export function usePublicAnalytics(shopId?: string) {
+  const refetchInterval = useLiveRefetchInterval(60_000);
+
   return useQuery({
     queryKey: ['public-analytics', shopId],
     queryFn: () => getPublicAnalytics(shopId as string),
     enabled: Boolean(shopId),
-    refetchInterval: 60_000
+    refetchInterval
   });
 }
 
 export function useEntryStatus(shopId?: string, entryId?: string) {
+  const refetchInterval = useLiveRefetchInterval(15_000);
+
   return useQuery({
     queryKey: ['entry-status', shopId, entryId],
     queryFn: () => getEntryStatus(shopId as string, entryId as string),
     enabled: Boolean(shopId && entryId),
-    refetchInterval: 15_000
+    refetchInterval
   });
 }
 

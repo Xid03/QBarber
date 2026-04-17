@@ -46,6 +46,18 @@ export function AdminAuthProvider({ children }: PropsWithChildren) {
     window.localStorage.setItem(storageKey, JSON.stringify(session));
   }, [session]);
 
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      setSessionState(null);
+    };
+
+    window.addEventListener('qflow:unauthorized', handleUnauthorized);
+
+    return () => {
+      window.removeEventListener('qflow:unauthorized', handleUnauthorized);
+    };
+  }, []);
+
   const value = useMemo<AdminAuthContextValue>(
     () => ({
       session,

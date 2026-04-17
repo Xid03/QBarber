@@ -26,6 +26,10 @@ export async function loginAdmin(_req: Request, res: Response) {
     throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid username or password.');
   }
 
+  if (adminUser.role === 'INACTIVE') {
+    throw new AppError(403, 'ACCOUNT_INACTIVE', 'This admin account has been deactivated.');
+  }
+
   const isPasswordValid = await bcrypt.compare(password, adminUser.passwordHash);
 
   if (!isPasswordValid) {

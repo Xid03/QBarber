@@ -1,14 +1,42 @@
-import type { AdminAnalyticsData } from '../../features/admin/types';
+import type { AdminAnalyticsData, AdminAnalyticsRange } from '../../features/admin/types';
 import { Card } from '../ui/Card';
 
-export function DateRangePicker() {
+const analyticsRangeOptions: Array<{ value: AdminAnalyticsRange; label: string }> = [
+  { value: 'last14days', label: 'Last 14 days' },
+  { value: 'today', label: 'Today' },
+  { value: 'week', label: 'This week' }
+];
+
+export function DateRangePicker({
+  value,
+  onChange
+}: {
+  value: AdminAnalyticsRange;
+  onChange: (nextRange: AdminAnalyticsRange) => void;
+}) {
   return (
-    <Card className="flex flex-wrap items-center gap-3">
+    <Card className="admin-panel flex flex-wrap items-center gap-3">
       <p className="section-label">Date range</p>
-      <div className="inline-flex rounded-full bg-slate-100 p-1 text-sm">
-        <span className="rounded-full bg-white px-3 py-1 font-medium shadow-sm">Last 14 days</span>
-        <span className="px-3 py-1 text-muted">Today</span>
-        <span className="px-3 py-1 text-muted">This week</span>
+      <div className="admin-soft-surface inline-flex rounded-full bg-slate-100 p-1 text-sm">
+        {analyticsRangeOptions.map((option) => {
+          const isActive = option.value === value;
+
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={`rounded-full px-3 py-1 font-medium transition ${
+                isActive
+                  ? 'admin-chip-active bg-white shadow-sm'
+                  : 'text-muted hover:bg-white/70 hover:text-slate-900'
+              }`}
+              aria-pressed={isActive}
+            >
+              {option.label}
+            </button>
+          );
+        })}
       </div>
     </Card>
   );
@@ -18,10 +46,10 @@ export function TrafficChart({ data }: { data: AdminAnalyticsData['hourlyTraffic
   const max = Math.max(...data.map((item) => item.count), 1);
 
   return (
-    <Card className="space-y-4">
+    <Card className="admin-panel space-y-4">
       <div>
         <p className="section-label">Traffic chart</p>
-        <p className="mt-2 text-lg font-semibold">When customers usually show up.</p>
+        <p className="mt-2 text-lg font-semibold text-slate-900">When customers usually show up.</p>
       </div>
       <div className="grid gap-3">
         {data.map((item) => (
@@ -52,16 +80,16 @@ export function WaitTimeDistribution({ averageWaitMin }: { averageWaitMin: numbe
   const max = Math.max(...tiers.map((tier) => tier.value), 1);
 
   return (
-    <Card className="space-y-4">
+    <Card className="admin-panel space-y-4">
       <div>
         <p className="section-label">Wait distribution</p>
-        <p className="mt-2 text-lg font-semibold">Current wait profile by bucket.</p>
+        <p className="mt-2 text-lg font-semibold text-slate-900">Current wait profile by bucket.</p>
       </div>
       <div className="grid gap-3">
         {tiers.map((tier) => (
           <div key={tier.label} className="space-y-2">
             <div className="flex items-center justify-between text-sm">
-              <span>{tier.label}</span>
+              <span className="text-slate-900">{tier.label}</span>
               <span className="text-muted">{tier.value}</span>
             </div>
             <div className="h-3 rounded-full bg-slate-200">
@@ -78,10 +106,10 @@ export function PeakHoursHeatmap({ data }: { data: AdminAnalyticsData['hourlyTra
   const max = Math.max(...data.map((item) => item.count), 1);
 
   return (
-    <Card className="space-y-4">
+    <Card className="admin-panel space-y-4">
       <div>
         <p className="section-label">Peak hours</p>
-        <p className="mt-2 text-lg font-semibold">Quick heat scan of busy windows.</p>
+        <p className="mt-2 text-lg font-semibold text-slate-900">Quick heat scan of busy windows.</p>
       </div>
       <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
         {data.map((item) => {
@@ -107,10 +135,10 @@ export function ServicePopularity({ data }: { data: AdminAnalyticsData['serviceP
   const total = data.reduce((sum, item) => sum + item.count, 0) || 1;
 
   return (
-    <Card className="space-y-4">
+    <Card className="admin-panel space-y-4">
       <div>
         <p className="section-label">Service popularity</p>
-        <p className="mt-2 text-lg font-semibold">Which services are carrying the floor.</p>
+        <p className="mt-2 text-lg font-semibold text-slate-900">Which services are carrying the floor.</p>
       </div>
       <div className="grid gap-3">
         {data.map((item) => (
